@@ -1,0 +1,257 @@
+# =============================================================
+# Local Model Optimizer - Default Configuration Example
+# =============================================================
+# Copy this file to config/default.yaml and customize as needed.
+# Values here represent sensible defaults.
+
+# -------------------------------------------------------------
+# Server Configuration
+# -------------------------------------------------------------
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1                    # uvicorn worker count (1 recommended for GPU inference)
+  reload: false                 # auto-reload on code change (dev only)
+  cors_origins:
+    - "*"                       # allowed CORS origins
+  request_timeout: 120          # max request timeout in seconds
+  max_request_size: 10485760    # 10MB max request body size
+
+# -------------------------------------------------------------
+# Model Configuration
+# -------------------------------------------------------------
+model:
+  # Path to the default model file (GGUF format for llama.cpp)
+  default_model: "models/llama-7b-q4_k_m.gguf"
+
+  # Model search directory (for auto-discovery)
+  model_dir: "models"
+
+  # Auto-download from HuggingFace Hub if model not found locally
+  auto_download: false
+  huggingface_token: ""         # HF token for gated models (or set HF_TOKEN env var)
+
+  # Default inference parameters
+  defaults:
+    n_ctx: 4096                 # context window size
+    n_batch: 512                # prompt processing batch size
+    n_gpu_layers: -1            # GPU offload layers (-1 = all, 0 = CPU only)
+    n_threads: 0                # CPU threads (0 = auto-detect)
+    use_mmap: true              # memory-mapped model loading
+    use_mlock: false            # lock model in RAM (prevents swapping)
+    rope_freq_base: 10000.0     # RoPE base frequency
+    rope_freq_scale: 1.0        # RoPE frequency scaling
+    verbose: false              # llama.cpp verbose logging
+
+  # Per-model overrides (key = model filename or alias)
+  overrides:
+    # example:
+    # "llama-7b-q4_k_m.gguf":
+    #   n_ctx: 8192
+    #   n_gpu_layers: 32
+
+# -------------------------------------------------------------
+# Generation / Inference Configuration
+# -------------------------------------------------------------
+inference:
+  # Default generation parameters
+  defaults:
+    max_tokens: 512
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 40
+    repeat_penalty: 1.1
+    stop: []                    # stop sequences (empty = use model defaults)
+    seed: -1                    # random seed (-1 = random)
+
+  # Streaming settings
+  stream:
+    enabled: true
+    chunk_size: 1               # tokens per streaming chunk
+
+# -------------------------------------------------------------
+# Memory Optimization Configuration
+# -------------------------------------------------------------
+# 整合 offloader / kv_cache / dynamic_loader 的配置
+memory_optimization:
+  # 量化级别
+  #   GGUF: q2_k, q3_k_s, q3_k_m, q3_k_l, q4_0, q4_k_s, q4_k_m,
+  #         q5_0, q5_k_s, q5_k_m, q6_k, q8_0
+  #   GPTQ: gptq-2bit, gptq-3bit, gptq-4bit, gptq-8bit
+  #   AWQ:  awq-4bit
+  #   BnB:  bnb-4bit, bnb-8bit
+  #   FP16: fp16 (no quantization)
+  quantization: "q4_k_m"
+
+  # 模型卸载配置 (Model Offloading)
+  # 控制模型层在 GPU / CPU / 磁盘 之间的分配
+  offload:
+    gpu_layers: -1              # 卸载到GPU的层数 (-1=全部, 0=仅CPU)
+    cpu_threads: 4              # CPU推理线程数
+    disk_offload: false         # 是否启用磁盘卸载 (三层策略)
+    swap_space_gb: 0.0          # 磁盘交换空间大小 (GB)
+    prefetch_layers: 2          # 从磁盘预取的层数
+    # 策略: gpu_only | gpu_cpu | gpu_cpu_disk | cpu_only
+    strategy: "gpu_cpu"
+    context_length: 4096
+    batch_size: 512
+
+  # KV Cache 优化配置
+  # 降低 KV Cache 内存占用，支持量化/压缩/前缀共享
+  kv_cache:
+    cache_bits: 16              # Cache量化位数 (16=FP16, 8=INT8, 4=INT4)
+    max_cache_size_gb: 2.0      # 最大Cache大小 (GB)
+    eviction_policy: "attention_score"  # 淘汰策略: lru / lfu / attention_score
+    prefix_sharing: true        # 是否启用前缀共享 (多请求复用相同prompt的KV)
+    compression_ratio: 0.5      # 压缩比例 (0.0~1.0)
+    page_size: 64               # PagedAttention页大小 (tokens数)
+    num_pages: 0                # 预分配页数 (0=自动计算)
+
+  # 动态层加载配置 (Dynamic Layer Loading)
+  # 按需加载模型层，而非一次性加载整个模型
+  dynamic:
+    max_gpu_layers: 20          # GPU最大驻留层数 (0=不使用动态加载)
+    max_cpu_layers: 40          # CPU最大驻留层数
+    prefetch_enabled: true      # 是否启用预测预取
+    prefetch_count: 2           # 预取层数
+    swap_enabled: false         # 是否启用层交换 (磁盘)
+    swap_directory: "./layer_cache"  # 磁盘交换目录
+    layer_access_threshold: 3   # 层访问N次后提升优先级
+    eviction_strategy: "lru"    # 淘汰策略: lru / lfu / adaptive
+    pipeline_enabled: true      # 是否启用流水线加载
+    batch_load_size: 4          # 批量加载层数
+    async_io_enabled: true      # 是否启用异步IO
+
+# -------------------------------------------------------------
+# Scheduler Configuration
+# -------------------------------------------------------------
+scheduler:
+  # Request queue
+  max_queue_size: 1000
+  max_global_concurrency: 4     # max simultaneous inference tasks
+
+  # Model selection strategy: balanced | speed | quality | memory
+  model_select_strategy: "balanced"
+
+  # Auto hardware detection for resource limits
+  auto_detect_vram: true
+
+  # Fallback VRAM budget if auto-detection fails (MB)
+  fallback_vram_mb: 8192
+
+  # Quantization preference (auto = let scheduler decide)
+  # Options: auto, q2_k, q3_k_s, q3_k_m, q4_0, q4_k_s, q4_k_m, q5_k_s, q5_k_m, q6_k, q8_0, fp16
+  quantization_preference: "auto"
+
+  # Model hot-swap timeout (seconds)
+  model_switch_timeout: 60
+
+  # Request retry
+  retry_on_failure: true
+  max_retries: 2
+
+# -------------------------------------------------------------
+# Hardware Detection Configuration
+# -------------------------------------------------------------
+hardware:
+  # Run hardware detection on startup
+  auto_detect: true
+
+  # GPU detection preferences
+  gpu:
+    enabled: true
+    preferred_vendor: "auto"    # auto | nvidia | amd | apple | intel
+    vram_reserve_percent: 20    # reserve this % of VRAM for system overhead
+
+  # CPU optimization
+  cpu:
+    threads_override: 0         # override auto-detected thread count (0 = auto)
+    prefer_physical_cores: true # use physical cores instead of logical
+
+  # Memory limits
+  memory:
+    max_ram_usage_percent: 70   # max % of system RAM for model loading
+    swap_warning_threshold_gb: 2  # warn if available memory falls below this
+
+# -------------------------------------------------------------
+# Monitoring Configuration
+# -------------------------------------------------------------
+monitoring:
+  # Enable performance metrics collection
+  enabled: true
+
+  # Collection interval (seconds)
+  collect_interval: 1.0
+
+  # History size (number of snapshots to retain)
+  history_size: 300             # 5 minutes at 1s interval
+
+  # Enable GPU monitoring (requires pynvml or torch)
+  gpu_monitoring: true
+
+  # Performance analysis thresholds
+  thresholds:
+    cpu_high: 85.0              # CPU usage warning (%)
+    memory_high: 80.0           # memory usage warning (%)
+    memory_critical: 90.0       # memory usage critical (%)
+    gpu_high: 90.0              # GPU utilization warning (%)
+    gpu_memory_high: 80.0       # GPU memory warning (%)
+    gpu_memory_critical: 90.0   # GPU memory critical (%)
+    tokens_per_second_low: 10.0 # minimum acceptable throughput
+    ttft_high_ms: 2000.0        # max acceptable TTFT (ms)
+
+  # Metrics export (optional)
+  export:
+    enabled: false
+    format: "json"              # json | csv | prometheus
+    path: "logs/metrics"
+
+# -------------------------------------------------------------
+# Logging Configuration
+# -------------------------------------------------------------
+logging:
+  # Log level: DEBUG | INFO | WARNING | ERROR | CRITICAL
+  level: "INFO"
+
+  # Log format
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+  # Console output
+  console:
+    enabled: true
+    colorized: true
+
+  # File logging
+  file:
+    enabled: true
+    path: "logs/app.log"
+    max_size_mb: 50             # max log file size before rotation
+    backup_count: 5             # number of rotated log files to keep
+
+  # Per-module log levels (overrides global level)
+  modules:
+    # "src.backends.llama_cpp": "DEBUG"
+    # "src.optimization.scheduler": "DEBUG"
+    # "uvicorn": "WARNING"
+
+# -------------------------------------------------------------
+# API Keys & Authentication (optional)
+# -------------------------------------------------------------
+auth:
+  enabled: false
+  api_keys: []                  # list of valid API keys
+  # - "sk-your-api-key-here"
+
+# -------------------------------------------------------------
+# Benchmark Configuration
+# -------------------------------------------------------------
+benchmark:
+  # Default benchmark parameters
+  warmup_iterations: 3
+  test_iterations: 10
+  prompt: "Explain the theory of relativity in simple terms."
+  max_tokens: 256
+
+  # Output
+  output_dir: "benchmark_results"
+  save_raw_data: true

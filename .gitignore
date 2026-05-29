@@ -1,0 +1,62 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.python-version
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Model files (large files, not tracked)
+*.gguf
+*.safetensors
+*.bin
+
+# Config (only submit example)
+config/default.yaml
+
+# Logs
+logs/
+
+# Layer cache
+layer_cache/
+
+# Environment variables (contains secrets like API keys and tokens)
+.env
+.env.local
+.env.*.local
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Security: never commit secrets
+secrets/
+*.pem
+*.key
+*.cert
+
+# Cache and temp
+.cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Benchmark results (may contain sensitive perf data)
+benchmark_results/

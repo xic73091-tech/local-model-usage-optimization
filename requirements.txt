@@ -1,0 +1,42 @@
+# =============================================================
+# Local Model Usage Optimization - Python Dependencies
+# =============================================================
+
+# --- Web Framework & Server ---
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# --- Local Model Inference ---
+llama-cpp-python>=0.2.0
+
+# --- System Monitoring ---
+psutil>=5.9.0
+
+# --- Configuration ---
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# --- Model Management ---
+huggingface-hub>=0.16.0
+
+# --- HTTP & Async ---
+httpx>=0.24.0
+aiofiles>=23.0.0
+
+# --- Utilities ---
+rich>=13.0.0
+click>=8.1.0
+
+# --- Optional: GPU Monitoring ---
+# pynvml>=11.5.0       # NVIDIA GPU monitoring (uncomment if needed)
+
+# --- Optional: Extended Backend Support ---
+# torch>=2.0.0         # PyTorch (uncomment for transformers backend)
+# transformers>=4.30.0  # HuggingFace Transformers (uncomment if needed)
+
+# --- Development & Testing ---
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# httpx              # also used as test client

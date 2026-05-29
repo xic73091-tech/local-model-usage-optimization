@@ -1,0 +1,1044 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-05-29",
+  "vram_configs": {
+    "4": {
+      "vram_gb": 4,
+      "name": "4GB",
+      "description": "入门级显卡",
+      "examples": "GTX 1650, RTX 3050",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 4GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "IQ2_XS",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 2.03,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.68,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 44.0,
+          "quality_score": 0.5,
+          "model_weight_gb": 2.03,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 4GB",
+            "量化: IQ2_XS (2.31 bits)",
+            "模型权重: 2.03 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 44.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 27,
+            "cpu_layers": 13,
+            "disk_layers": 0,
+            "gpu_ratio": 0.68,
+            "gpu_usage_gb": 2.28,
+            "cpu_usage_gb": 1.1,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 3.07,
+          "estimated_ram_gb": 1.1,
+          "estimated_speed_tps": 16.0,
+          "quality_score": 0.45,
+          "model_weight_gb": 3.38,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 4GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 3.38 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=27, CPU=13",
+            "预估速度: 16.0 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 14,
+            "cpu_layers": 46,
+            "disk_layers": 0,
+            "gpu_ratio": 0.23,
+            "gpu_usage_gb": 1.82,
+            "cpu_usage_gb": 5.98,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.98,
+          "estimated_ram_gb": 5.98,
+          "estimated_speed_tps": 2.4,
+          "quality_score": 0.45,
+          "model_weight_gb": 7.8,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 4GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 7.80 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=14, CPU=46",
+            "预估速度: 2.4 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 10,
+            "cpu_layers": 70,
+            "disk_layers": 0,
+            "gpu_ratio": 0.12,
+            "gpu_usage_gb": 2.27,
+            "cpu_usage_gb": 15.92,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 512,
+          "sliding_window": 256,
+          "estimated_vram_gb": 2.99,
+          "estimated_ram_gb": 15.92,
+          "estimated_speed_tps": 0.6,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 0.312,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 4GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 512, KV量化: 8bit, 滑动窗口: 256",
+            "KV Cache: 0.312 GB",
+            "层分配: GPU=10, CPU=70",
+            "预估速度: 0.6 tokens/s"
+          ]
+        }
+      }
+    },
+    "6": {
+      "vram_gb": 6,
+      "name": "6GB",
+      "description": "主流显卡",
+      "examples": "RTX 2060, RTX 3060",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 6GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.92,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.57,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 40.0,
+          "quality_score": 0.85,
+          "model_weight_gb": 3.92,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 6GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 3.92 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 40.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "IQ2_XS",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 40,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.77,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.56,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 23.7,
+          "quality_score": 0.5,
+          "model_weight_gb": 3.77,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 6GB",
+            "量化: IQ2_XS (2.31 bits)",
+            "模型权重: 3.77 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=40, CPU=0",
+            "预估速度: 23.7 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 30,
+            "cpu_layers": 30,
+            "disk_layers": 0,
+            "gpu_ratio": 0.5,
+            "gpu_usage_gb": 3.9,
+            "cpu_usage_gb": 3.9,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 5.06,
+          "estimated_ram_gb": 3.9,
+          "estimated_speed_tps": 5.1,
+          "quality_score": 0.45,
+          "model_weight_gb": 7.8,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 6GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 7.80 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=30, CPU=30",
+            "预估速度: 5.1 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 19,
+            "cpu_layers": 61,
+            "disk_layers": 0,
+            "gpu_ratio": 0.24,
+            "gpu_usage_gb": 4.32,
+            "cpu_usage_gb": 13.88,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 512,
+          "sliding_window": 256,
+          "estimated_vram_gb": 5.04,
+          "estimated_ram_gb": 13.88,
+          "estimated_speed_tps": 1.0,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 0.312,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 6GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 512, KV量化: 8bit, 滑动窗口: 256",
+            "KV Cache: 0.312 GB",
+            "层分配: GPU=19, CPU=61",
+            "预估速度: 1.0 tokens/s"
+          ]
+        }
+      }
+    },
+    "8": {
+      "vram_gb": 8,
+      "name": "8GB",
+      "description": "中高端显卡",
+      "examples": "RTX 3060Ti, RTX 4060",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 8GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.92,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.57,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 40.0,
+          "quality_score": 0.85,
+          "model_weight_gb": 3.92,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 8GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 3.92 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 40.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "Q3_K_M",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 40,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 5.72,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 6.51,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 24.8,
+          "quality_score": 0.7,
+          "model_weight_gb": 5.72,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 8GB",
+            "量化: Q3_K_M (3.9 bits)",
+            "模型权重: 5.72 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=40, CPU=0",
+            "预估速度: 24.8 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 45,
+            "cpu_layers": 15,
+            "disk_layers": 0,
+            "gpu_ratio": 0.75,
+            "gpu_usage_gb": 5.85,
+            "cpu_usage_gb": 1.95,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 7.01,
+          "estimated_ram_gb": 1.95,
+          "estimated_speed_tps": 7.7,
+          "quality_score": 0.45,
+          "model_weight_gb": 7.8,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 8GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 7.80 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=45, CPU=15",
+            "预估速度: 7.7 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 23,
+            "cpu_layers": 57,
+            "disk_layers": 0,
+            "gpu_ratio": 0.29,
+            "gpu_usage_gb": 5.23,
+            "cpu_usage_gb": 12.97,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 6.88,
+          "estimated_ram_gb": 12.97,
+          "estimated_speed_tps": 1.3,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 1.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 8GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 1.250 GB",
+            "层分配: GPU=23, CPU=57",
+            "预估速度: 1.3 tokens/s"
+          ]
+        }
+      }
+    },
+    "12": {
+      "vram_gb": 12,
+      "name": "12GB",
+      "description": "高端显卡",
+      "examples": "RTX 3060 12G, RTX 4070",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 12GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.92,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.57,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 40.0,
+          "quality_score": 0.85,
+          "model_weight_gb": 3.92,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 12GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 3.92 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 40.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 40,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 7.28,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 8.07,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 21.5,
+          "quality_score": 0.85,
+          "model_weight_gb": 7.28,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 12GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 7.28 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=40, CPU=0",
+            "预估速度: 21.5 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "IQ2_XS",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 60,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 8.7,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 9.86,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 10.3,
+          "quality_score": 0.5,
+          "model_weight_gb": 8.7,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 12GB",
+            "量化: IQ2_XS (2.31 bits)",
+            "模型权重: 8.70 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=60, CPU=0",
+            "预估速度: 10.3 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 41,
+            "cpu_layers": 39,
+            "disk_layers": 0,
+            "gpu_ratio": 0.51,
+            "gpu_usage_gb": 9.33,
+            "cpu_usage_gb": 8.87,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 10.98,
+          "estimated_ram_gb": 8.87,
+          "estimated_speed_tps": 2.3,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 1.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 12GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 1.250 GB",
+            "层分配: GPU=41, CPU=39",
+            "预估速度: 2.3 tokens/s"
+          ]
+        }
+      }
+    },
+    "16": {
+      "vram_gb": 16,
+      "name": "16GB",
+      "description": "专业显卡",
+      "examples": "RTX 4060Ti 16G, RTX 4080",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 16GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.92,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.57,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 40.0,
+          "quality_score": 0.85,
+          "model_weight_gb": 3.92,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 16GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 3.92 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 40.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 40,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 7.28,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 8.07,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 21.5,
+          "quality_score": 0.85,
+          "model_weight_gb": 7.28,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 16GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 7.28 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=40, CPU=0",
+            "预估速度: 21.5 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "IQ3_S",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 60,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 12.3,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 13.46,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 10.5,
+          "quality_score": 0.65,
+          "model_weight_gb": 12.3,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 16GB",
+            "量化: IQ3_S (3.4 bits)",
+            "模型权重: 12.30 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=60, CPU=0",
+            "预估速度: 10.5 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 59,
+            "cpu_layers": 21,
+            "disk_layers": 0,
+            "gpu_ratio": 0.74,
+            "gpu_usage_gb": 13.42,
+            "cpu_usage_gb": 4.78,
+            "strategy": "gpu_cpu"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 15.07,
+          "estimated_ram_gb": 4.78,
+          "estimated_speed_tps": 3.2,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 1.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 16GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 1.250 GB",
+            "层分配: GPU=59, CPU=21",
+            "预估速度: 3.2 tokens/s"
+          ]
+        }
+      }
+    },
+    "24": {
+      "vram_gb": 24,
+      "name": "24GB",
+      "description": "旗舰显卡",
+      "examples": "RTX 3090, RTX 4090",
+      "model_configs": {
+        "3.0B": {
+          "model_size_b": 3.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 1.68,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 2.33,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 93.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 1.68,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 3.0B, 目标: balanced, 显存: 24GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 1.68 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 93.3 tokens/s"
+          ]
+        },
+        "7.0B": {
+          "model_size_b": 7.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 32,
+            "gpu_layers": 32,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 3.92,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 4.57,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 40.0,
+          "quality_score": 0.85,
+          "model_weight_gb": 3.92,
+          "kv_cache_gb": 0.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 7.0B, 目标: balanced, 显存: 24GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 3.92 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.250 GB",
+            "层分配: GPU=32, CPU=0",
+            "预估速度: 40.0 tokens/s"
+          ]
+        },
+        "13.0B": {
+          "model_size_b": 13.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 40,
+            "gpu_layers": 40,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 7.28,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 8.07,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 21.5,
+          "quality_score": 0.85,
+          "model_weight_gb": 7.28,
+          "kv_cache_gb": 0.391,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 13.0B, 目标: balanced, 显存: 24GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 7.28 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.391 GB",
+            "层分配: GPU=40, CPU=0",
+            "预估速度: 21.5 tokens/s"
+          ]
+        },
+        "30.0B": {
+          "model_size_b": 30.0,
+          "quantization": "Q4_K_M",
+          "layer_allocation": {
+            "total_layers": 60,
+            "gpu_layers": 60,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 16.8,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 17.96,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 9.3,
+          "quality_score": 0.85,
+          "model_weight_gb": 16.8,
+          "kv_cache_gb": 0.762,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 30.0B, 目标: balanced, 显存: 24GB",
+            "量化: Q4_K_M (4.8 bits)",
+            "模型权重: 16.80 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 0.762 GB",
+            "层分配: GPU=60, CPU=0",
+            "预估速度: 9.3 tokens/s"
+          ]
+        },
+        "70.0B": {
+          "model_size_b": 70.0,
+          "quantization": "IQ2_XXS",
+          "layer_allocation": {
+            "total_layers": 80,
+            "gpu_layers": 80,
+            "cpu_layers": 0,
+            "disk_layers": 0,
+            "gpu_ratio": 1.0,
+            "gpu_usage_gb": 18.2,
+            "cpu_usage_gb": 0.0,
+            "strategy": "gpu_only"
+          },
+          "kv_quant_bits": 8,
+          "context_length": 2048,
+          "sliding_window": 1024,
+          "estimated_vram_gb": 19.85,
+          "estimated_ram_gb": 0.0,
+          "estimated_speed_tps": 4.4,
+          "quality_score": 0.45,
+          "model_weight_gb": 18.2,
+          "kv_cache_gb": 1.25,
+          "overhead_gb": 0.4,
+          "notes": [
+            "模型: 70.0B, 目标: balanced, 显存: 24GB",
+            "量化: IQ2_XXS (2.06 bits)",
+            "模型权重: 18.20 GB",
+            "上下文: 2048, KV量化: 8bit, 滑动窗口: 1024",
+            "KV Cache: 1.250 GB",
+            "层分配: GPU=80, CPU=0",
+            "预估速度: 4.4 tokens/s"
+          ]
+        }
+      }
+    }
+  }
+}
