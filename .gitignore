@@ -60,3 +60,7 @@ secrets/
 
 # Benchmark results (may contain sensitive perf data)
 benchmark_results/
+
+# Self-learning system data (generated, not source)
+data/
+reports/

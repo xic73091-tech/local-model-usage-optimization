@@ -239,13 +239,14 @@ class AnalysisEngine:
         if not proposals:
             return []
 
-        # Group by affected module overlap
-        seen_titles: set = set()
+        # Dedup by source_url + affected_modules combination
+        seen_keys: set = set()
         unique = []
         for p in proposals:
-            # Simple dedup by exact title
-            if p.title not in seen_titles:
-                seen_titles.add(p.title)
+            modules_key = tuple(sorted(p.affected_modules))
+            key = (p.source_url, modules_key)
+            if key not in seen_keys:
+                seen_keys.add(key)
                 unique.append(p)
 
         return unique

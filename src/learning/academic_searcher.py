@@ -48,7 +48,8 @@ class AcademicConfig:
     arxiv_max_results: int = 10
     semantic_scholar_max_results: int = 10
     min_citations: int = 0
-    rate_limit_delay: float = 3.0  # seconds between API calls
+    rate_limit_delay: float = 3.0  # seconds between arxiv API calls
+    s2_rate_limit_delay: float = 5.0  # seconds between Semantic Scholar calls (stricter)
     arxiv_categories: List[str] = field(default_factory=lambda: ["cs.CL", "cs.LG", "cs.DC"])
     semantic_scholar_api_key: str = ""
 
@@ -56,7 +57,7 @@ class AcademicConfig:
 class AcademicSearcher:
     """Searches academic databases for relevant papers."""
 
-    ARXIV_API = "http://export.arxiv.org/api/query"
+    ARXIV_API = "https://export.arxiv.org/api/query"
     S2_API = "https://api.semanticscholar.org/graph/v1"
 
     def __init__(self, knowledge_base: KnowledgeBase, config: Optional[AcademicConfig] = None):
@@ -91,12 +92,17 @@ class AcademicSearcher:
             except Exception as e:
                 logger.error("arxiv search failed for '%s': %s", query, e)
 
-        # Search Semantic Scholar
+        # Search Semantic Scholar (stricter rate limits without API key)
         for query in SEMANTIC_SCHOLAR_QUERIES:
             try:
                 papers = await self._search_semantic_scholar(query)
                 all_papers.extend(papers)
-                await asyncio.sleep(self._config.rate_limit_delay)
+                await asyncio.sleep(self._config.s2_rate_limit_delay)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    logger.warning("Semantic Scholar rate limit hit, stopping search")
+                    break
+                logger.error("Semantic Scholar search failed for '%s': %s", query, e)
             except Exception as e:
                 logger.error("Semantic Scholar search failed for '%s': %s", query, e)
 
