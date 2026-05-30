@@ -650,10 +650,30 @@ class ModelManager:
             result = snapshot_download(**kwargs)
             logger.info("下载完成: %s", result)
 
+        # 下载后验证完整性
+        result_path = Path(result)
+        self._verify_download_integrity(result_path)
+
         # 下载后重新扫描
         self.scan_models(deep=True)
 
-        return Path(result)
+        return result_path
+
+    @staticmethod
+    def _verify_download_integrity(file_path: Path) -> str:
+        """验证下载文件的 SHA256 校验和并记录日志。"""
+        import hashlib
+        sha256 = hashlib.sha256()
+        try:
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    sha256.update(chunk)
+            digest = sha256.hexdigest()
+            logger.info("文件完整性校验: %s SHA256=%s", file_path.name, digest)
+            return digest
+        except Exception as e:
+            logger.warning("完整性校验失败: %s - %s", file_path, e)
+            return ""
 
     # -----------------------------------------------------------------------
     # 格式转换

@@ -7,6 +7,8 @@ import time
 import sys
 from pathlib import Path
 
+import pytest
+
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -51,6 +53,7 @@ def test_access_pattern_predictor():
     print("[OK] 访问模式预测器测试通过\n")
 
 
+@pytest.mark.asyncio
 async def test_pipeline_manager():
     """测试流水线管理器"""
     print("=== 测试流水线管理器 ===")
@@ -87,6 +90,7 @@ async def test_pipeline_manager():
     print("[OK] 流水线管理器测试通过\n")
 
 
+@pytest.mark.asyncio
 async def test_double_buffer_pipeline():
     """测试双缓冲流水线"""
     print("=== 测试双缓冲流水线 ===")
@@ -114,6 +118,7 @@ async def test_double_buffer_pipeline():
     print("[OK] 双缓冲流水线测试通过\n")
 
 
+@pytest.mark.asyncio
 async def test_pipeline_speedup():
     """测试流水线加速效果"""
     print("=== 测试流水线加速效果 ===")
@@ -168,6 +173,7 @@ async def test_pipeline_speedup():
     print()
 
 
+@pytest.mark.asyncio
 async def test_concurrent_pipeline():
     """测试并发流水线"""
     print("=== 测试并发流水线 ===")

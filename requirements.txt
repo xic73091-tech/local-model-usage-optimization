@@ -31,6 +31,7 @@ click>=8.1.0
 
 # --- Optional: GPU Monitoring ---
 # pynvml>=11.5.0       # NVIDIA GPU monitoring (uncomment if needed)
+# pyrsmi>=0.1.0        # AMD ROCm GPU monitoring (uncomment if needed)
 
 # --- Optional: Extended Backend Support ---
 # torch>=2.0.0         # PyTorch (uncomment for transformers backend)

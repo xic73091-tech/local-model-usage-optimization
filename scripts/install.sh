@@ -277,10 +277,18 @@ install_dependencies() {
 
     # Install core dependencies (excluding llama-cpp-python which needs special handling)
     info "Installing core dependencies..."
-    grep -v "^#" requirements.txt | grep -v "llama-cpp-python" | grep -v "^$" | while read -r dep; do
-        pip install "$dep" 2>&1 | tail -1
-    done
+    local install_errors=0
+    while read -r dep; do
+        [ -z "$dep" ] && continue
+        if ! pip install "$dep" 2>&1 | tail -1; then
+            warn "Failed to install: $dep"
+            ((install_errors++))
+        fi
+    done < <(grep -v "^#" requirements.txt | grep -v "llama-cpp-python" | grep -v "^$")
 
+    if [ $install_errors -gt 0 ]; then
+        warn "$install_errors dependency(ies) failed to install"
+    fi
     success "Core dependencies installed"
 
     # Install llama-cpp-python with appropriate GPU support

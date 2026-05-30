@@ -305,26 +305,43 @@ class HardwareDetector:
         return cpu
 
     def _detect_cpu_windows(self, cpu: CPUInfo) -> None:
-        """Windows 平台 CPU 检测"""
+        """Windows 平台 CPU 检测 (通过 PowerShell CIM，替代已弃用的 WMIC)"""
         try:
             result = subprocess.run(
-                ["wmic", "cpu", "get",
-                 "Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed",
-                 "/format:list"],
-                capture_output=True, text=True, timeout=10
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_Processor | Select-Object -First 1 "
+                 "Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=15
             )
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if line.startswith("Name=") and line[5:]:
-                    cpu.brand = line[5:]
-                elif line.startswith("NumberOfCores=") and line[14:]:
-                    cpu.physical_cores = int(line[14:])
-                elif line.startswith("NumberOfLogicalProcessors=") and line[26:]:
-                    cpu.logical_cores = int(line[26:])
-                elif line.startswith("MaxClockSpeed=") and line[14:]:
-                    cpu.frequency_mhz = float(line[14:])
+            if result.returncode == 0 and result.stdout.strip():
+                import json
+                data = json.loads(result.stdout)
+                cpu.brand = data.get("Name", cpu.brand)
+                cpu.physical_cores = data.get("NumberOfCores", cpu.physical_cores)
+                cpu.logical_cores = data.get("NumberOfLogicalProcessors", cpu.logical_cores)
+                cpu.frequency_mhz = float(data.get("MaxClockSpeed", 0))
         except Exception as e:
-            logger.debug(f"wmic CPU 检测失败: {e}")
+            logger.debug(f"PowerShell CPU 检测失败: {e}")
+            # 回退: 尝试 wmic (兼容旧系统)
+            try:
+                result = subprocess.run(
+                    ["wmic", "cpu", "get",
+                     "Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed",
+                     "/format:list"],
+                    capture_output=True, text=True, timeout=10
+                )
+                for line in result.stdout.strip().splitlines():
+                    line = line.strip()
+                    if line.startswith("Name=") and line[5:]:
+                        cpu.brand = line[5:]
+                    elif line.startswith("NumberOfCores=") and line[14:]:
+                        cpu.physical_cores = int(line[14:])
+                    elif line.startswith("NumberOfLogicalProcessors=") and line[26:]:
+                        cpu.logical_cores = int(line[26:])
+                    elif line.startswith("MaxClockSpeed=") and line[14:]:
+                        cpu.frequency_mhz = float(line[14:])
+            except Exception:
+                pass
 
         # 指令集检测 (Windows: 通过 Python 或 CPUID)
         self._detect_cpu_features_fallback(cpu)
@@ -343,17 +360,29 @@ class HardwareDetector:
 
         try:
             result = subprocess.run(
-                ["sysctl", "-n", "hw.physicalcpu", "hw.logicalcpu", "hw.cpufrequency_max"],
+                ["sysctl", "-n", "hw.physicalcpu", "hw.logicalcpu"],
                 capture_output=True, text=True, timeout=10
             )
             lines = result.stdout.strip().splitlines()
             if len(lines) >= 2:
                 cpu.physical_cores = int(lines[0])
                 cpu.logical_cores = int(lines[1])
-            if len(lines) >= 3 and lines[2].isdigit():
-                cpu.frequency_mhz = int(lines[2]) / 1_000_000
         except Exception:
             pass
+
+        # CPU频率: hw.cpufrequency_max 在 Apple Silicon 上不存在
+        for freq_key in ["hw.cpufrequency_max", "hw.cpufrequency"]:
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", freq_key],
+                    capture_output=True, text=True, timeout=5
+                )
+                val = result.stdout.strip()
+                if val.isdigit() and int(val) > 0:
+                    cpu.frequency_mhz = int(val) / 1_000_000
+                    break
+            except Exception:
+                continue
 
         # Apple Silicon 使用 NEON
         if cpu.architecture == "arm64":
@@ -385,12 +414,21 @@ class HardwareDetector:
             result = subprocess.run(
                 ["lscpu"], capture_output=True, text=True, timeout=10
             )
+            cores_per = 0
+            sockets = 1
             for line in result.stdout.splitlines():
                 if "Core(s) per socket" in line and ":" in line:
-                    cores_per = int(line.split(":")[1].strip())
+                    try:
+                        cores_per = int(line.split(":")[1].strip())
+                    except ValueError:
+                        pass
                 elif "Socket(s)" in line and ":" in line:
-                    sockets = int(line.split(":")[1].strip())
-                    cpu.physical_cores = cores_per * sockets if 'cores_per' in dir() else 0
+                    try:
+                        sockets = int(line.split(":")[1].strip())
+                    except ValueError:
+                        pass
+            if cores_per > 0:
+                cpu.physical_cores = cores_per * sockets
         except Exception:
             pass
 
@@ -610,11 +648,66 @@ class HardwareDetector:
             except Exception as e:
                 logger.debug(f"rocm-smi 检测失败: {e}")
 
-        # Windows: 通过 WMIC 或 dxdiag 检测 AMD
+        # Windows: 通过 PowerShell CIM 检测 AMD (替代不可靠的 WMIC AdapterRAM)
         if sys.platform == "win32":
-            return self._detect_gpu_wmic(gpu, target_vendor="amd")
+            return self._detect_amd_gpu_windows(gpu)
 
         return False
+
+    def _detect_amd_gpu_windows(self, gpu: GPUInfo) -> bool:
+        """Windows 通过 PowerShell CIM 检测 AMD GPU"""
+        try:
+            # 方法1: PowerShell Get-CimInstance 获取显存
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Where-Object {"
+                 "$_.Name -match 'AMD|Radeon'} | "
+                 "Select-Object -First 1 Name,AdapterRAM,DriverVersion | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                import json
+                data = json.loads(result.stdout)
+                if isinstance(data, dict) and data.get("Name"):
+                    gpu.vendor = GPUVendor.AMD
+                    gpu.name = data["Name"]
+                    gpu.driver_version = data.get("DriverVersion", "")
+                    adapter_ram = data.get("AdapterRAM", 0)
+                    if adapter_ram and adapter_ram > 0:
+                        gpu.vram_total_mb = adapter_ram // (1024 * 1024)
+                    else:
+                        # AdapterRAM 不可靠时，从GPU名称推断显存
+                        gpu.vram_total_mb = self._guess_amd_vram_from_name(gpu.name)
+                    gpu.gpu_count = 1
+                    if gpu.vram_total_mb > 0:
+                        return True
+        except Exception as e:
+            logger.debug(f"PowerShell AMD GPU 检测失败: {e}")
+
+        # 方法2: 回退到 WMIC
+        return self._detect_gpu_wmic(gpu, target_vendor="amd")
+
+    @staticmethod
+    def _guess_amd_vram_from_name(name: str) -> int:
+        """根据AMD GPU名称推断显存(MB)，用于AdapterRAM不可靠时的回退"""
+        name_lower = name.lower()
+        # 常见AMD GPU显存映射表
+        vram_table = {
+            "7900 xtx": 24576, "7900 xt": 20480, "7900 gre": 16384,
+            "7800 xt": 16384, "7700 xt": 12288, "7600 xt": 16384, "7600": 8192,
+            "6950 xt": 16384, "6900 xt": 16384, "6800 xt": 16384, "6800": 16384,
+            "6750 xt": 12288, "6700 xt": 12288, "6700": 10240,
+            "6650 xt": 8192, "6600 xt": 8192, "6600": 8192,
+            "6500 xt": 4096, "6400": 4096,
+            "rx 580": 8192, "rx 570": 8192, "rx 560": 4096, "rx 550": 4096,
+            "rx 590": 8192, "vega 64": 8192, "vega 56": 8192,
+            "radeon pro": 16384,  # 通用Professional卡
+        }
+        for pattern, vram in vram_table.items():
+            if pattern in name_lower:
+                return vram
+        # 无法推断时返回0
+        return 0
 
     def _detect_apple_gpu(self, gpu: GPUInfo) -> bool:
         """检测 Apple Silicon GPU (Metal)"""
@@ -663,13 +756,72 @@ class HardwareDetector:
         return False
 
     def _detect_intel_gpu(self, gpu: GPUInfo) -> bool:
-        """检测 Intel 集成显卡 (有限支持)"""
+        """检测 Intel 集成显卡 / Arc 独显"""
         if sys.platform == "win32":
             return self._detect_gpu_wmic(gpu, target_vendor="intel")
+
+        # Linux: 通过 lspci 检测 Intel GPU
+        if sys.platform == "linux":
+            try:
+                result = subprocess.run(
+                    ["lspci"], capture_output=True, text=True, timeout=10
+                )
+                for line in result.stdout.splitlines():
+                    ll = line.lower()
+                    if ("vga" in ll or "display" in ll or "3d" in ll) and "intel" in ll:
+                        gpu.vendor = GPUVendor.INTEL
+                        gpu.name = line.split(":", 2)[-1].strip() if ":" in line else line.strip()
+                        gpu.gpu_count = 1
+                        # Intel 集成显卡通常共享系统内存，估算为系统内存的1/4
+                        try:
+                            with open("/proc/meminfo", "r") as f:
+                                for memline in f:
+                                    if memline.startswith("MemTotal:"):
+                                        total_kb = int(memline.split()[1])
+                                        gpu.vram_total_mb = total_kb // (1024 * 4)
+                                        break
+                        except Exception:
+                            pass
+                        return True
+            except Exception:
+                pass
+
         return False
 
     def _detect_gpu_wmic(self, gpu: GPUInfo, target_vendor: str = "") -> bool:
-        """Windows 通过 WMIC 检测 GPU"""
+        """Windows 检测 GPU (优先 PowerShell CIM，回退 WMIC)"""
+        # 方法1: PowerShell Get-CimInstance (现代Windows)
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | "
+                 "Select-Object Name,AdapterRAM,DriverVersion | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                import json
+                data = json.loads(result.stdout)
+                if isinstance(data, dict):
+                    data = [data]
+                for item in data:
+                    name = item.get("Name", "")
+                    if name and self._gpu_matches_vendor(name, target_vendor):
+                        gpu.vendor = self._name_to_vendor(name)
+                        gpu.name = name
+                        gpu.driver_version = item.get("DriverVersion", "")
+                        adapter_ram = item.get("AdapterRAM", 0)
+                        if adapter_ram and adapter_ram > 0:
+                            gpu.vram_total_mb = adapter_ram // (1024 * 1024)
+                        else:
+                            # AdapterRAM不可靠时从名称推断
+                            gpu.vram_total_mb = self._guess_vram_from_name(name)
+                        gpu.gpu_count += 1
+                        if gpu.vram_total_mb > 0:
+                            return True
+        except Exception as e:
+            logger.debug(f"PowerShell CIM GPU 检测失败: {e}")
+
+        # 方法2: 回退到 WMIC (兼容旧系统)
         try:
             result = subprocess.run(
                 ["wmic", "path", "win32_videocontroller", "get",
@@ -684,7 +836,6 @@ class HardwareDetector:
             for line in result.stdout.strip().splitlines():
                 line = line.strip()
                 if line.startswith("Name=") and line[5:]:
-                    # 处理上一个 GPU
                     if current_name and self._gpu_matches_vendor(current_name, target_vendor):
                         gpu.vendor = self._name_to_vendor(current_name)
                         gpu.name = current_name
@@ -703,7 +854,6 @@ class HardwareDetector:
                 elif line.startswith("DriverVersion=") and line[14:]:
                     current_driver = line[14:]
 
-            # 最后一个 GPU
             if current_name and self._gpu_matches_vendor(current_name, target_vendor):
                 gpu.vendor = self._name_to_vendor(current_name)
                 gpu.name = current_name
@@ -716,6 +866,43 @@ class HardwareDetector:
             logger.debug(f"WMIC GPU 检测失败: {e}")
 
         return False
+
+    @staticmethod
+    def _guess_vram_from_name(name: str) -> int:
+        """根据GPU名称推断显存(MB)，用于AdapterRAM不可靠时的回退"""
+        name_lower = name.lower()
+        # NVIDIA 常见显存
+        nvidia_table = {
+            "rtx 4090": 24576, "rtx 4080": 16384, "rtx 4070 ti": 12288,
+            "rtx 4070": 12288, "rtx 4060 ti": 16384, "rtx 4060": 8192,
+            "rtx 4050": 6144,
+            "rtx 3090": 24576, "rtx 3080": 10240, "rtx 3070": 8192,
+            "rtx 3060": 12288, "rtx 3050": 8192,
+            "rtx 2080": 8192, "rtx 2070": 8192, "rtx 2060": 6144,
+            "gtx 1660": 6144, "gtx 1650": 4096,
+            "gtx 1080": 8192, "gtx 1070": 8192, "gtx 1060": 6144,
+        }
+        # AMD 常见显存
+        amd_table = {
+            "7900 xtx": 24576, "7900 xt": 20480, "7800 xt": 16384,
+            "7700 xt": 12288, "7600 xt": 16384, "7600": 8192,
+            "6900 xt": 16384, "6800 xt": 16384, "6700 xt": 12288,
+            "6600 xt": 8192, "6600": 8192, "6500 xt": 4096,
+            "rx 580": 8192, "rx 570": 8192, "vega 64": 8192,
+        }
+        # Intel 常见显存 (集成显卡共享内存)
+        intel_table = {
+            "arc a770": 16384, "arc a750": 8192, "arc a580": 8192,
+            "arc a380": 6144, "arc a310": 4096,
+        }
+        for table in [nvidia_table, amd_table, intel_table]:
+            for pattern, vram in table.items():
+                if pattern in name_lower:
+                    return vram
+        # Intel 集成显卡默认估算
+        if "intel" in name_lower and ("iris" in name_lower or "uhd" in name_lower or "hd" in name_lower):
+            return 2048  # 集成显卡保守估计 2GB
+        return 0
 
     @staticmethod
     def _gpu_matches_vendor(name: str, target: str) -> bool:
@@ -757,29 +944,46 @@ class HardwareDetector:
                 self._detect_memory_linux(mem)
         except Exception as e:
             logger.warning(f"内存检测失败: {e}")
-            # 回退：通过 Python 获取近似值
+            # 回退：通过 Python 获取近似值 (平台安全)
             try:
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                c_ulonglong = ctypes.c_ulonglong
-                class MEMORYSTATUSEX(ctypes.Structure):
-                    _fields_ = [
-                        ("dwLength", ctypes.c_ulong),
-                        ("dwMemoryLoad", ctypes.c_ulong),
-                        ("ullTotalPhys", c_ulonglong),
-                        ("ullAvailPhys", c_ulonglong),
-                        ("ullTotalPageFile", c_ulonglong),
-                        ("ullAvailPageFile", c_ulonglong),
-                        ("ullTotalVirtual", c_ulonglong),
-                        ("ullAvailVirtual", c_ulonglong),
-                        ("ullAvailExtendedVirtual", c_ulonglong),
-                    ]
-                stat = MEMORYSTATUSEX()
-                stat.dwLength = ctypes.sizeof(stat)
-                if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-                    mem.total_mb = stat.ullTotalPhys // (1024 * 1024)
-                    mem.available_mb = stat.ullAvailPhys // (1024 * 1024)
-                    mem.swap_total_mb = (stat.ullTotalPageFile - stat.ullTotalPhys) // (1024 * 1024)
+                if sys.platform == "win32":
+                    import ctypes
+                    kernel32 = ctypes.windll.kernel32
+                    c_ulonglong = ctypes.c_ulonglong
+                    class MEMORYSTATUSEX(ctypes.Structure):
+                        _fields_ = [
+                            ("dwLength", ctypes.c_ulong),
+                            ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", c_ulonglong),
+                            ("ullAvailPhys", c_ulonglong),
+                            ("ullTotalPageFile", c_ulonglong),
+                            ("ullAvailPageFile", c_ulonglong),
+                            ("ullTotalVirtual", c_ulonglong),
+                            ("ullAvailVirtual", c_ulonglong),
+                            ("ullAvailExtendedVirtual", c_ulonglong),
+                        ]
+                    stat = MEMORYSTATUSEX()
+                    stat.dwLength = ctypes.sizeof(stat)
+                    if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                        mem.total_mb = stat.ullTotalPhys // (1024 * 1024)
+                        mem.available_mb = stat.ullAvailPhys // (1024 * 1024)
+                        mem.swap_total_mb = (stat.ullTotalPageFile - stat.ullTotalPhys) // (1024 * 1024)
+                elif sys.platform == "darwin":
+                    result = subprocess.run(
+                        ["sysctl", "-n", "hw.memsize"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.stdout.strip().isdigit():
+                        mem.total_mb = int(result.stdout.strip()) // (1024 * 1024)
+                        mem.available_mb = mem.total_mb // 2
+                else:
+                    # Linux: /proc/meminfo 应该总是可用的
+                    with open("/proc/meminfo", "r") as f:
+                        for line in f:
+                            if line.startswith("MemTotal:"):
+                                mem.total_mb = int(line.split()[1]) // 1024
+                            elif line.startswith("MemAvailable:"):
+                                mem.available_mb = int(line.split()[1]) // 1024
             except Exception:
                 pass
 
@@ -823,7 +1027,7 @@ class HardwareDetector:
         self._detect_memory_details_windows(mem)
 
     def _detect_memory_darwin(self, mem: MemoryInfo) -> None:
-        """macOS 内存检测"""
+        """macOS 内存检测 (通过 sysctl + vm_stat 获取准确可用内存)"""
         try:
             result = subprocess.run(
                 ["sysctl", "-n", "hw.memsize"],
@@ -831,9 +1035,46 @@ class HardwareDetector:
             )
             if result.stdout.strip().isdigit():
                 mem.total_mb = int(result.stdout.strip()) // (1024 * 1024)
-                mem.available_mb = mem.total_mb  # 简化：macOS 内存管理复杂
         except Exception:
             pass
+
+        # 通过 vm_stat 获取实际可用内存
+        try:
+            vm_result = subprocess.run(
+                ["vm_stat"],
+                capture_output=True, text=True, timeout=10
+            )
+            if vm_result.returncode == 0:
+                import re
+                page_size = 16384  # Apple Silicon 默认 16KB page
+                free_pages = 0
+                speculative_pages = 0
+                inactive_pages = 0
+                for line in vm_result.stdout.splitlines():
+                    if "page size of" in line.lower():
+                        m = re.search(r"(\d+)\s+bytes", line)
+                        if m:
+                            page_size = int(m.group(1))
+                    elif "Pages free" in line:
+                        m = re.search(r"(\d+)", line)
+                        if m:
+                            free_pages = int(m.group(1))
+                    elif "Pages speculative" in line:
+                        m = re.search(r"(\d+)", line)
+                        if m:
+                            speculative_pages = int(m.group(1))
+                    elif "Pages inactive" in line:
+                        m = re.search(r"(\d+)", line)
+                        if m:
+                            inactive_pages = int(m.group(1))
+                # 可用内存 = free + speculative + inactive (inactive可被系统回收)
+                available_bytes = (free_pages + speculative_pages + inactive_pages) * page_size
+                mem.available_mb = available_bytes // (1024 * 1024)
+        except Exception as e:
+            logger.debug(f"vm_stat 检测失败: {e}")
+            # 回退: 估算可用内存为总内存的50%
+            if mem.total_mb > 0 and mem.available_mb == 0:
+                mem.available_mb = mem.total_mb // 2
 
     def _detect_memory_linux(self, mem: MemoryInfo) -> None:
         """Linux 内存检测"""
@@ -853,51 +1094,63 @@ class HardwareDetector:
         self._detect_memory_details_linux(mem)
 
     def _detect_memory_details_windows(self, mem: MemoryInfo) -> None:
-        """Windows 检测内存频率、通道数和 DDR 类型"""
+        """Windows 检测内存频率、通道数和 DDR 类型 (通过 PowerShell CIM)"""
         try:
-            # 通过 WMIC 获取内存信息
+            # 优先使用 PowerShell Get-CimInstance
             result = subprocess.run(
-                ["wmic", "memorychip", "get",
-                 "Speed,MemoryType,DeviceLocator", "/format:list"],
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_PhysicalMemory | "
+                 "Select-Object Speed,SMBIOSMemoryType,DeviceLocator | ConvertTo-Json"],
                 capture_output=True, text=True, timeout=15
             )
-            speeds = []
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if line.startswith("Speed=") and line[6:]:
-                    try:
-                        speeds.append(int(line[6:]))
-                    except ValueError:
-                        pass
-                elif line.startswith("MemoryType=") and line[11:]:
-                    try:
-                        mem_type_id = int(line[11:])
-                        # DDR 类型映射
+            if result.returncode == 0 and result.stdout.strip():
+                import json
+                data = json.loads(result.stdout)
+                if isinstance(data, dict):
+                    data = [data]
+                speeds = []
+                for item in data:
+                    speed = item.get("Speed", 0)
+                    if speed:
+                        speeds.append(int(speed))
+                    smbios_type = item.get("SMBIOSMemoryType", 0)
+                    if smbios_type and not mem.ddr_type:
                         ddr_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
-                        mem.ddr_type = ddr_map.get(mem_type_id, f"类型{mem_type_id}")
-                    except ValueError:
-                        pass
-
-            if speeds:
-                mem.speed_mhz = min(speeds)  # 取最低频率（双通道以最慢为准）
-                mem.channels = len(speeds)
-
-            # 如果 WMIC 没有获取到 DDR 类型，通过 PowerShell 补充
-            if not mem.ddr_type:
-                ps_result = subprocess.run(
-                    ["powershell", "-Command",
-                     "Get-CimInstance -ClassName Win32_PhysicalMemory | "
-                     "Select-Object -First 1 SMBIOSMemoryType | ConvertTo-Json"],
+                        mem.ddr_type = ddr_map.get(smbios_type, f"类型{smbios_type}")
+                if speeds:
+                    mem.speed_mhz = min(speeds)
+                    mem.channels = len(speeds)
+            else:
+                raise Exception("PowerShell 返回为空")
+        except Exception as e:
+            logger.debug(f"PowerShell 内存检测失败: {e}, 回退到 WMIC")
+            # 回退: 尝试 WMIC (兼容旧系统)
+            try:
+                result = subprocess.run(
+                    ["wmic", "memorychip", "get",
+                     "Speed,MemoryType,DeviceLocator", "/format:list"],
                     capture_output=True, text=True, timeout=15
                 )
-                if ps_result.returncode == 0 and ps_result.stdout.strip():
-                    import json
-                    data = json.loads(ps_result.stdout)
-                    smbios_type = data.get("SMBIOSMemoryType", 0)
-                    ddr_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
-                    mem.ddr_type = ddr_map.get(smbios_type, "")
-        except Exception as e:
-            logger.debug(f"Windows 内存详细信息检测失败: {e}")
+                speeds = []
+                for line in result.stdout.strip().splitlines():
+                    line = line.strip()
+                    if line.startswith("Speed=") and line[6:]:
+                        try:
+                            speeds.append(int(line[6:]))
+                        except ValueError:
+                            pass
+                    elif line.startswith("MemoryType=") and line[11:]:
+                        try:
+                            mem_type_id = int(line[11:])
+                            ddr_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
+                            mem.ddr_type = ddr_map.get(mem_type_id, f"类型{mem_type_id}")
+                        except ValueError:
+                            pass
+                if speeds:
+                    mem.speed_mhz = min(speeds)
+                    mem.channels = len(speeds)
+            except Exception:
+                pass
 
     def _detect_memory_details_linux(self, mem: MemoryInfo) -> None:
         """Linux 检测内存频率、通道数和 DDR 类型"""
@@ -959,7 +1212,7 @@ class HardwareDetector:
             elif sys.platform == "linux":
                 self._detect_disk_type_linux(mem)
             elif sys.platform == "darwin":
-                mem.disk_type = "NVMe/SSD"  # 现代 Mac 基本都是 SSD
+                self._detect_disk_type_darwin(mem)
         except Exception:
             pass
 
@@ -1024,6 +1277,59 @@ class HardwareDetector:
 
         # 尝试通过 nvme cli 获取速度信息
         self._detect_nvme_speed_linux(mem)
+
+    def _detect_disk_type_darwin(self, mem: MemoryInfo) -> None:
+        """macOS 检测磁盘类型 (SSD/HDD/NVMe)"""
+        try:
+            # 方法1: system_profiler 获取存储信息
+            result = subprocess.run(
+                ["system_profiler", "SPStorageDataType"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0:
+                output = result.stdout
+                if "NVMe" in output or "Apple" in output:
+                    mem.disk_type = "NVMe"
+                    mem.disk_speed.is_nvme = True
+                    mem.disk_speed.interface = "NVMe"
+                    mem.disk_speed.sequential_read_mbps = 3500  # Apple 默认 NVMe 估算
+                    mem.disk_speed.sequential_write_mbps = 3000
+                elif "SSD" in output or "Solid State" in output:
+                    mem.disk_type = "SSD"
+                    mem.disk_speed.interface = "SATA"
+                elif "HDD" in output or "Rotational" in output:
+                    mem.disk_type = "HDD"
+                    mem.disk_speed.interface = "SATA"
+                else:
+                    # 现代 Mac 基本都是 SSD
+                    mem.disk_type = "NVMe/SSD"
+                    mem.disk_speed.interface = "NVMe"
+
+            # 方法2: diskutil info 补充
+            if mem.disk_speed.sequential_read_mbps == 0:
+                diskutil = subprocess.run(
+                    ["diskutil", "info", "/"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if diskutil.returncode == 0:
+                    for line in diskutil.stdout.splitlines():
+                        if "Protocol" in line and "NVMe" in line:
+                            mem.disk_type = "NVMe"
+                            mem.disk_speed.is_nvme = True
+                            mem.disk_speed.interface = "NVMe"
+                            mem.disk_speed.sequential_read_mbps = 3500
+                            mem.disk_speed.sequential_write_mbps = 3000
+                            break
+                        elif "Protocol" in line and "SATA" in line:
+                            mem.disk_type = "SSD"
+                            mem.disk_speed.interface = "SATA"
+                            mem.disk_speed.sequential_read_mbps = 550
+                            mem.disk_speed.sequential_write_mbps = 520
+                            break
+        except Exception:
+            # 兜底: 现代 Mac 基本都是 SSD
+            mem.disk_type = "NVMe/SSD"
+            mem.disk_speed.interface = "NVMe"
 
     def _detect_nvme_pcie_gen_linux(self, mem: MemoryInfo) -> None:
         """Linux 检测 NVMe PCIe 代数"""
@@ -1168,6 +1474,8 @@ class HardwareDetector:
 
         # 5. GPU offload 层数
         if rec.use_gpu and rec.use_cuda:
+            rec.gpu_offload_layers = self._estimate_gpu_layers(gpu, rec.max_model_size_gb)
+        elif rec.use_gpu and rec.use_rocm:
             rec.gpu_offload_layers = self._estimate_gpu_layers(gpu, rec.max_model_size_gb)
         elif rec.use_metal:
             rec.gpu_offload_layers = 999  # Apple Silicon 全部 offload
@@ -1320,6 +1628,15 @@ class HardwareDetector:
                     notes.append("GPU 显存不足 6GB，建议使用较小模型或更低量化")
                 if rec.gpu_offload_layers < 999:
                     notes.append("显存不足以完全加载模型，部分层将由CPU处理 (混合推理)")
+            elif gpu.vendor == GPUVendor.AMD:
+                notes.append("AMD GPU 使用 ROCm 后端 (llama.cpp HIP)")
+                if gpu.rocm_version:
+                    notes.append(f"ROCm 版本: {gpu.rocm_version}")
+                notes.append("AMD ROCm 推理性能约为 NVIDIA CUDA 的 70-80%")
+                if sys.platform == "win32":
+                    notes.append("Windows ROCm 支持有限，建议使用 Linux 获得最佳性能")
+                if gpu.vram_total_gb < 8:
+                    notes.append("AMD GPU 显存较小，建议使用 Q4_K_M 或更低量化")
             elif gpu.vendor == GPUVendor.APPLE:
                 notes.append("Apple Silicon 统一内存架构，GPU 可直接访问全部内存")
                 notes.append("推荐使用 MLX 或 llama.cpp Metal 后端")

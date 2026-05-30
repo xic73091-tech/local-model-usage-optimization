@@ -168,7 +168,7 @@ if (-not $SkipVenv) {
 
     # Upgrade pip
     Write-Info "Upgrading pip..."
-    python -m pip install --upgrade pip setuptools wheel 2>&1 | Select-Object -Last 1
+    & $PythonExe -m pip install --upgrade pip setuptools wheel 2>&1 | Select-Object -Last 1
 } else {
     Write-Warn "Skipping virtual environment creation (-SkipVenv)"
     if (Test-Path $VenvDir) {
@@ -214,7 +214,7 @@ if (-not $NoGpu) {
     } catch {
         # Try AMD
         try {
-            $amdGpu = Get-WmiObject Win32_VideoController -ErrorAction Stop |
+            $amdGpu = Get-CimInstance Win32_VideoController -ErrorAction Stop |
                 Where-Object { $_.Name -match "AMD|Radeon" } |
                 Select-Object -First 1
 
@@ -228,7 +228,7 @@ if (-not $NoGpu) {
         # Try Intel Arc
         if ($GpuType -eq "none") {
             try {
-                $intelGpu = Get-WmiObject Win32_VideoController -ErrorAction Stop |
+                $intelGpu = Get-CimInstance Win32_VideoController -ErrorAction Stop |
                     Where-Object { $_.Name -match "Intel.*Arc|Intel.*Graphics" } |
                     Select-Object -First 1
 
@@ -263,7 +263,7 @@ $requirements = Get-Content "requirements.txt" |
     Where-Object { $_ -notmatch "llama-cpp-python" }
 
 foreach ($dep in $requirements) {
-    pip install $dep 2>&1 | Select-Object -Last 1
+    & $PythonExe -m pip install $dep 2>&1 | Select-Object -Last 1
 }
 
 Write-Ok "Core dependencies installed"
@@ -391,7 +391,7 @@ $criticalModules = @("fastapi", "uvicorn", "pydantic", "psutil", "yaml")
 
 foreach ($module in $criticalModules) {
     try {
-        python -c "import $module" 2>&1 | Out-Null
+        & $PythonExe -c "import $module" 2>&1 | Out-Null
         Write-Ok "Import: $module"
     } catch {
         Write-Warn "Failed to import: $module"
@@ -401,11 +401,11 @@ foreach ($module in $criticalModules) {
 
 # Check llama-cpp-python
 try {
-    python -c "import llama_cpp" 2>&1 | Out-Null
+    & $PythonExe -c "import llama_cpp" 2>&1 | Out-Null
     Write-Ok "Import: llama_cpp"
 
     try {
-        $llamaVer = python -c "import llama_cpp; print(llama_cpp.__version__)" 2>&1
+        $llamaVer = & $PythonExe -c "import llama_cpp; print(llama_cpp.__version__)" 2>&1
         Write-Info "llama-cpp-python version: $llamaVer"
     } catch {}
 } catch {

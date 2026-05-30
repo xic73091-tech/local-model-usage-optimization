@@ -25,6 +25,7 @@ install_requires = [
 
 extras_require = {
     "gpu-monitor": ["pynvml>=11.5.0"],
+    "gpu-monitor-amd": ["pyrsmi>=0.1.0"],
     "torch-backend": ["torch>=2.0.0", "transformers>=4.30.0"],
     "dev": [
         "pytest>=7.0.0",

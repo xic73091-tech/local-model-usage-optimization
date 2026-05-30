@@ -74,9 +74,19 @@ _ATTENTION_LAYER_RATIO: float = 0.40   # 注意力占每层 ~40%
 _FFN_LAYER_RATIO: float = 0.60         # FFN 占每层 ~60%
 
 # 硬件基准推理速率 (tokens/s) - 用于估算
-_BASELINE_GPU_TPS_7B: float = 40.0     # 7B Q4_K_M 在中端GPU上的基线
+_BASELINE_GPU_TPS_7B: float = 40.0     # 7B Q4_K_M 在中端NVIDIA GPU上的基线
 _BASELINE_CPU_TPS_7B: float = 8.0      # 7B Q4_K_M 在中端CPU上的基线
 _DISK_PENALTY_FACTOR: float = 0.15     # 磁盘卸载的速度惩罚系数
+
+# GPU厂商性能因子 (相对于NVIDIA CUDA)
+_GPU_VENDOR_PERF_FACTOR: Dict[str, float] = {
+    "nvidia": 1.00,          # NVIDIA CUDA: 基线
+    "amd_linux": 0.75,       # AMD ROCm Linux: ~75% of CUDA
+    "amd_windows": 0.50,     # AMD ROCm Windows: ~50% (ROCm支持有限)
+    "apple": 0.85,           # Apple Metal: ~85% (高效但生态不同)
+    "intel": 0.40,           # Intel SYCL: ~40% (早期支持)
+    "cpu": 1.00,             # CPU-only: 不受GPU厂商因子影响
+}
 
 # KV Cache 估算: 每层每1K上下文约占用 (MB)
 _KV_CACHE_PER_LAYER_PER_1K_CTX: float = 0.5
@@ -606,6 +616,7 @@ class ModelOffloader:
         config: OffloadConfig,
         gpu_vram_gb: float = 0.0,
         cpu_ram_gb: float = 16.0,
+        gpu_vendor: str = "nvidia",
     ) -> PerformanceEstimate:
         """预估指定配置下的推理性能
 
@@ -614,6 +625,7 @@ class ModelOffloader:
           - GPU/CPU层数比例对速度的影响
           - 磁盘I/O带来的额外延迟
           - 硬件规模的扩展性
+          - GPU厂商性能差异 (NVIDIA/AMD/Apple/Intel)
 
         Args:
             model_size_b:  模型参数量 (B)
@@ -621,6 +633,7 @@ class ModelOffloader:
             config:        卸载配置
             gpu_vram_gb:   GPU显存 (GB)，用于估算GPU算力
             cpu_ram_gb:    CPU内存 (GB)
+            gpu_vendor:    GPU厂商 ('nvidia', 'amd', 'apple', 'intel', 'cpu')
 
         Returns:
             PerformanceEstimate: 预估tokens/s、延迟倍数等
@@ -632,9 +645,17 @@ class ModelOffloader:
 
         quant_factor = _get_speed_factor(quantization)
 
-        # 基准速率 (以7B Q4_K_M中端GPU为基准)
+        # 基准速率 (以7B Q4_K_M中端NVIDIA GPU为基准)
         # 参数量越大速度越慢: tps ∝ 1/sqrt(params)
         size_penalty = math.sqrt(7.0 / max(model_size_b, 0.5))
+
+        # GPU厂商性能因子
+        import sys
+        if gpu_vendor == "amd":
+            vendor_key = "amd_windows" if sys.platform == "win32" else "amd_linux"
+        else:
+            vendor_key = gpu_vendor
+        vendor_factor = _GPU_VENDOR_PERF_FACTOR.get(vendor_key, 1.0)
 
         # GPU速率估算
         gpu_tps = 0.0
@@ -642,7 +663,7 @@ class ModelOffloader:
             # GPU算力随显存大致线性增长(简化)
             vram_factor = min(gpu_vram_gb / 8.0, 3.0)
             gpu_ratio = gpu_l / max(total_layers, 1)
-            gpu_tps = _BASELINE_GPU_TPS_7B * size_penalty * quant_factor * vram_factor * gpu_ratio
+            gpu_tps = _BASELINE_GPU_TPS_7B * size_penalty * quant_factor * vram_factor * gpu_ratio * vendor_factor
 
         # CPU速率估算
         cpu_tps = 0.0
@@ -674,7 +695,7 @@ class ModelOffloader:
         estimated_tps = max(estimated_tps, 0.1)
 
         # 相对延迟因子 (相对于GPU-Only)
-        gpu_only_tps = _BASELINE_GPU_TPS_7B * size_penalty * quant_factor
+        gpu_only_tps = _BASELINE_GPU_TPS_7B * size_penalty * quant_factor * vendor_factor
         latency_factor = gpu_only_tps / max(estimated_tps, 0.1)
 
         # 瓶颈判定
@@ -704,6 +725,7 @@ class ModelOffloader:
         gpu_vram_gb: float = 8.0,
         cpu_ram_gb: float = 16.0,
         disk_available_gb: float = 100.0,
+        gpu_vendor: str = "nvidia",
     ) -> List[OffloadReport]:
         """对比所有可行的卸载策略
 
@@ -734,7 +756,7 @@ class ModelOffloader:
             # 检查是否真的能放下
             if mem.gpu_vram_mb <= gpu_vram_gb * 1024:
                 perf = self.estimate_performance(
-                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb
+                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb, gpu_vendor
                 )
                 reports.append(OffloadReport(
                     config=config, memory=mem, performance=perf,
@@ -758,7 +780,7 @@ class ModelOffloader:
                 )
                 mem = self.estimate_memory_usage(model_size_b, quantization, config)
                 perf = self.estimate_performance(
-                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb
+                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb, gpu_vendor
                 )
                 cpu_actual = total_layers - optimal_gpu
                 reports.append(OffloadReport(
@@ -796,7 +818,7 @@ class ModelOffloader:
                 )
                 mem = self.estimate_memory_usage(model_size_b, quantization, config)
                 perf = self.estimate_performance(
-                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb
+                    model_size_b, quantization, config, gpu_vram_gb, cpu_ram_gb, gpu_vendor
                 )
                 reports.append(OffloadReport(
                     config=config, memory=mem, performance=perf,
@@ -817,7 +839,7 @@ class ModelOffloader:
         # CPU-Only需要检查内存是否够
         if mem.cpu_ram_mb <= cpu_ram_gb * 1024 * 0.8:
             perf = self.estimate_performance(
-                model_size_b, quantization, config, 0, cpu_ram_gb
+                model_size_b, quantization, config, 0, cpu_ram_gb, gpu_vendor
             )
             reports.append(OffloadReport(
                 config=config, memory=mem, performance=perf,
@@ -927,6 +949,7 @@ class ModelOffloader:
         quantization: str = "q4_k_m",
         gpu_vram_gb: float = 8.0,
         cpu_ram_gb: float = 16.0,
+        gpu_vendor: str = "nvidia",
     ) -> str:
         """获取策略对比的文本摘要 (适合打印/日志)
 
@@ -940,7 +963,7 @@ class ModelOffloader:
             格式化的策略对比文本
         """
         reports = self.compare_strategies(
-            model_size_b, quantization, gpu_vram_gb, cpu_ram_gb
+            model_size_b, quantization, gpu_vram_gb, cpu_ram_gb, gpu_vendor=gpu_vendor
         )
 
         if not reports:

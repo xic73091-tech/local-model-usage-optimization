@@ -1,9 +1,16 @@
 """
 Performance metrics collection module.
 Collects CPU, memory, and GPU metrics with historical storage.
+Supports NVIDIA (torch.cuda / pynvml), AMD (rocm-smi), and Apple Silicon.
 """
 
 import asyncio
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -16,6 +23,12 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+
+try:
+    import pynvml
+    HAS_PYNVML = True
+except ImportError:
+    HAS_PYNVML = False
 
 
 @dataclass
@@ -69,6 +82,34 @@ class MetricsCollector:
             memory_total_gb=mem.total / (1024 ** 3),
         )
 
+        # GPU metrics: 按优先级尝试 pynvml → torch.cuda → rocm-smi → Apple
+        self._collect_gpu_metrics(metrics)
+
+        self._latest = metrics
+        return metrics
+
+    def _collect_gpu_metrics(self, metrics: PerformanceMetrics) -> None:
+        """收集GPU指标，自动适配NVIDIA/AMD/Apple。"""
+        # --- NVIDIA: pynvml (轻量，无需torch) ---
+        if HAS_PYNVML:
+            try:
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                metrics.gpu_percent = util.gpu
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                metrics.gpu_memory_total_gb = mem_info.total / (1024 ** 3)
+                metrics.gpu_memory_used_gb = mem_info.used / (1024 ** 3)
+                metrics.gpu_memory_percent = (
+                    metrics.gpu_memory_used_gb / metrics.gpu_memory_total_gb * 100
+                    if metrics.gpu_memory_total_gb > 0 else 0.0
+                )
+                pynvml.nvmlShutdown()
+                return
+            except Exception:
+                pass
+
+        # --- NVIDIA: torch.cuda 回退 ---
         if HAS_TORCH and torch.cuda.is_available():
             try:
                 metrics.gpu_percent = torch.cuda.utilization()
@@ -79,11 +120,130 @@ class MetricsCollector:
                     metrics.gpu_memory_used_gb / metrics.gpu_memory_total_gb * 100
                     if metrics.gpu_memory_total_gb > 0 else 0.0
                 )
+                return
             except Exception:
                 pass
 
-        self._latest = metrics
-        return metrics
+        # --- AMD: rocm-smi ---
+        rocm_smi = shutil.which("rocm-smi")
+        if rocm_smi:
+            try:
+                result = subprocess.run(
+                    [rocm_smi, "--showmeminfo", "vram", "--showuse"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    total, used = 0.0, 0.0
+                    for line in result.stdout.splitlines():
+                        ll = line.lower()
+                        if "total" in ll:
+                            m = re.search(r"([\d.]+)\s*(MB|GB|MiB|GiB)", line, re.IGNORECASE)
+                            if m:
+                                val = float(m.group(1))
+                                if "gb" in m.group(2).lower():
+                                    val *= 1024
+                                total = val
+                        elif "used" in ll:
+                            m = re.search(r"([\d.]+)\s*(MB|GB|MiB|GiB)", line, re.IGNORECASE)
+                            if m:
+                                val = float(m.group(1))
+                                if "gb" in m.group(2).lower():
+                                    val *= 1024
+                                used = val
+                    if total > 0:
+                        metrics.gpu_memory_total_gb = total / 1024
+                        metrics.gpu_memory_used_gb = used / 1024
+                        metrics.gpu_memory_percent = (used / total * 100) if total > 0 else 0.0
+                        # GPU利用率需要通过 rocm-smi 的其他参数获取
+                        try:
+                            util_result = subprocess.run(
+                                [rocm_smi, "--showuse"],
+                                capture_output=True, text=True, timeout=10,
+                            )
+                            for line in util_result.stdout.splitlines():
+                                if "gpu use" in line.lower() or "gpu %" in line.lower():
+                                    m = re.search(r"(\d+)%", line)
+                                    if m:
+                                        metrics.gpu_percent = float(m.group(1))
+                        except Exception:
+                            pass
+                        return
+            except Exception:
+                pass
+
+        # --- AMD Windows: PowerShell CIM (基本显存信息，无实时利用率) ---
+        if sys.platform == "win32":
+            try:
+                result = subprocess.run(
+                    ["powershell", "-Command",
+                     "Get-CimInstance Win32_VideoController | Where-Object {"
+                     "$_.Name -match 'AMD|Radeon'} | "
+                     "Select-Object -First 1 Name,AdapterRAM | ConvertTo-Json"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    import json
+                    data = json.loads(result.stdout)
+                    if isinstance(data, dict) and data.get("Name"):
+                        adapter_ram = data.get("AdapterRAM", 0)
+                        if adapter_ram and adapter_ram > 0:
+                            metrics.gpu_memory_total_gb = adapter_ram / (1024 ** 3)
+                            # Windows 无法通过标准API获取AMD实时显存使用量
+                            # 使用 psutil 系统内存使用率作为近似
+                            metrics.gpu_memory_percent = psutil.virtual_memory().percent
+                            metrics.gpu_percent = 0.0  # 无实时利用率数据
+                            return
+            except Exception:
+                pass
+
+        # --- Apple Silicon ---
+        if sys.platform == "darwin" and platform.machine() == "arm64":
+            try:
+                # 统一内存: 从 sysctl 获取总内存
+                result = subprocess.run(
+                    ["sysctl", "-n", "hw.memsize"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.stdout.strip().isdigit():
+                    total_bytes = int(result.stdout.strip())
+                    metrics.gpu_memory_total_gb = total_bytes / (1024 ** 3)
+
+                    # 通过 vm_stat 获取已用内存近似值
+                    vm_result = subprocess.run(
+                        ["vm_stat"],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    if vm_result.returncode == 0:
+                        page_size = 16384
+                        free_pages, active_pages, wired_pages = 0, 0, 0
+                        for line in vm_result.stdout.splitlines():
+                            if "page size of" in line.lower():
+                                m_match = re.search(r"(\d+)\s+bytes", line)
+                                if m_match:
+                                    page_size = int(m_match.group(1))
+                            elif "Pages free" in line:
+                                m_match = re.search(r"(\d+)", line)
+                                if m_match:
+                                    free_pages = int(m_match.group(1))
+                            elif "Pages active" in line:
+                                m_match = re.search(r"(\d+)", line)
+                                if m_match:
+                                    active_pages = int(m_match.group(1))
+                            elif "Pages wired" in line:
+                                m_match = re.search(r"(\d+)", line)
+                                if m_match:
+                                    wired_pages = int(m_match.group(1))
+                        used_bytes = (active_pages + wired_pages) * page_size
+                        metrics.gpu_memory_used_gb = used_bytes / (1024 ** 3)
+                        metrics.gpu_memory_percent = (
+                            metrics.gpu_memory_used_gb / metrics.gpu_memory_total_gb * 100
+                            if metrics.gpu_memory_total_gb > 0 else 0.0
+                        )
+                        # Apple 没有标准API获取GPU利用率，使用内存利用率近似
+                        metrics.gpu_percent = metrics.gpu_memory_percent
+                        return
+            except Exception:
+                pass
 
     async def _collect_loop(self):
         """Background collection loop."""

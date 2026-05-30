@@ -12,6 +12,7 @@ class BackendType(Enum):
     VLLM = "vllm"
     EXLLAMA = "exllama"
     TRANSFORMERS = "transformers"
+    VULKAN = "vulkan"          # 跨平台GPU加速 (NVIDIA/AMD/Intel/Apple via MoltenVK)
 
 
 @dataclass

@@ -6,6 +6,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import pytest
+
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -36,6 +38,7 @@ from src.optimization.pipeline_parallel import (
 )
 
 
+@pytest.mark.asyncio
 async def test_speculative_decoding():
     """测试Speculative Decoding"""
     print("=== Speculative Decoding ===")
@@ -53,6 +56,7 @@ async def test_speculative_decoding():
     print("[OK]\n")
 
 
+@pytest.mark.asyncio
 async def test_mixed_precision():
     """测试混合精度量化"""
     print("=== Mixed Precision ===")
@@ -78,6 +82,7 @@ async def test_mixed_precision():
     print("[OK]\n")
 
 
+@pytest.mark.asyncio
 async def test_adaptive_optimizer():
     """测试自适应优化器"""
     print("=== Adaptive Optimizer ===")
@@ -102,6 +107,7 @@ async def test_adaptive_optimizer():
     print("[OK]\n")
 
 
+@pytest.mark.asyncio
 async def test_pipeline_parallel():
     """测试流水线并行"""
     print("=== Pipeline Parallel ===")

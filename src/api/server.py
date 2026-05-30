@@ -859,7 +859,9 @@ async def _completion_stream(model_id: str, prompt: str, req: CompletionRequest)
 
 
 @app.get("/v1/models")
-async def list_models_v1():
+async def list_models_v1(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """OpenAI-compatible model listing."""
     models: List[Dict[str, Any]] = []
     for model_id, entry in app_state.model_registry.items():
@@ -885,7 +887,9 @@ async def list_models_v1():
 # ================================================================
 
 @app.get("/api/hardware")
-async def get_hardware():
+async def get_hardware(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Return detected hardware profile."""
     if app_state.hardware_detector is None:
         raise HTTPException(status_code=503, detail="Hardware detection not available")
@@ -901,7 +905,9 @@ async def get_hardware():
 # ================================================================
 
 @app.get("/api/models")
-async def list_models():
+async def list_models(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """List all known models with their status."""
     result = []
     for model_id, entry in app_state.model_registry.items():

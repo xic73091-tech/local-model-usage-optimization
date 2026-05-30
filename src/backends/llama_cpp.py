@@ -3,8 +3,11 @@
 import asyncio
 import gc
 import os
+import platform
+import shutil
 import struct
 import subprocess
+import sys
 import time
 from typing import AsyncIterator, Dict, Iterator, List, Optional
 
@@ -17,21 +20,189 @@ from .base import (
 )
 
 
+def _detect_gpu_vendor() -> str:
+    """
+    检测GPU厂商，返回 'nvidia' / 'amd' / 'apple' / 'intel' / 'unknown'。
+    """
+    # NVIDIA: nvidia-smi 存在即认为有NVIDIA GPU
+    if shutil.which("nvidia-smi") or any(
+        os.path.exists(p) for p in [
+            r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+            "/usr/bin/nvidia-smi",
+            "/usr/local/bin/nvidia-smi",
+        ]
+    ):
+        return "nvidia"
+
+    # Apple Silicon
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        return "apple"
+
+    # AMD: Linux 有 rocm-smi，Windows 通过 WMI 检测
+    if shutil.which("rocm-smi"):
+        return "amd"
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Where-Object {"
+                 "$_.Name -match 'AMD|Radeon'} | Select-Object -First 1 Name"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if "AMD" in result.stdout or "Radeon" in result.stdout:
+                return "amd"
+        except Exception:
+            pass
+
+    # Intel (Windows)
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Where-Object {"
+                 "$_.Name -match 'Intel.*Arc|Intel.*Graphics'} | Select-Object -First 1 Name"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if "Intel" in result.stdout:
+                return "intel"
+        except Exception:
+            pass
+
+    # Intel (Linux: lspci)
+    if sys.platform == "linux":
+        try:
+            result = subprocess.run(
+                ["lspci"], capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                ll = line.lower()
+                if ("vga" in ll or "display" in ll or "3d" in ll) and "intel" in ll:
+                    return "intel"
+        except Exception:
+            pass
+
+    return "unknown"
+
+
 def _detect_gpu_vram_mb() -> float:
     """
     检测可用GPU显存(MB)。
-    优先尝试nvidia-smi，失败则返回0(CPU-only)。
+    按优先级尝试: NVIDIA → AMD → Apple → 返回0(CPU-only)。
     """
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            values = [int(x.strip()) for x in result.stdout.strip().split("\n") if x.strip()]
-            return float(max(values)) if values else 0.0
-    except Exception:
-        pass
+    vendor = _detect_gpu_vendor()
+
+    # --- NVIDIA: nvidia-smi ---
+    if vendor == "nvidia":
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                values = [int(x.strip()) for x in result.stdout.strip().split("\n") if x.strip()]
+                return float(max(values)) if values else 0.0
+        except Exception:
+            pass
+
+    # --- AMD Linux: rocm-smi ---
+    if vendor == "amd":
+        try:
+            result = subprocess.run(
+                ["rocm-smi", "--showmeminfo", "vram"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                import re
+                total, used = 0, 0
+                for line in result.stdout.splitlines():
+                    ll = line.lower()
+                    if "total" in ll:
+                        m = re.search(r"([\d.]+)\s*(MB|GB|MiB|GiB)", line, re.IGNORECASE)
+                        if m:
+                            val = float(m.group(1))
+                            if "gb" in m.group(2).lower():
+                                val *= 1024
+                            total = val
+                    elif "used" in ll:
+                        m = re.search(r"([\d.]+)\s*(MB|GB|MiB|GiB)", line, re.IGNORECASE)
+                        if m:
+                            val = float(m.group(1))
+                            if "gb" in m.group(2).lower():
+                                val *= 1024
+                            used = val
+                if total > 0:
+                    return total - used
+        except Exception:
+            pass
+
+        # AMD Windows: 通过 PowerShell 获取显存信息
+        if sys.platform == "win32":
+            try:
+                result = subprocess.run(
+                    ["powershell", "-Command",
+                     "Get-CimInstance Win32_VideoController | Where-Object {"
+                     "$_.Name -match 'AMD|Radeon'} | "
+                     "Select-Object -First 1 AdapterRAM | ConvertTo-Json"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    import json
+                    data = json.loads(result.stdout)
+                    adapter_ram = data.get("AdapterRAM", 0)
+                    if adapter_ram > 0:
+                        return adapter_ram / (1024 * 1024)
+            except Exception:
+                pass
+
+    # --- Apple Silicon: 统一内存 ---
+    if vendor == "apple":
+        try:
+            # 获取总内存
+            result = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.stdout.strip().isdigit():
+                total_bytes = int(result.stdout.strip())
+                total_mb = total_bytes // (1024 * 1024)
+
+                # 通过 vm_stat 获取可用内存
+                vm_result = subprocess.run(
+                    ["vm_stat"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if vm_result.returncode == 0:
+                    import re
+                    page_size = 16384  # Apple Silicon 默认 16KB page
+                    free_pages = 0
+                    speculative_pages = 0
+                    inactive_pages = 0
+                    for line in vm_result.stdout.splitlines():
+                        if "page size of" in line.lower():
+                            m = re.search(r"(\d+)\s+bytes", line)
+                            if m:
+                                page_size = int(m.group(1))
+                        elif "Pages free" in line:
+                            m = re.search(r"(\d+)", line)
+                            if m:
+                                free_pages = int(m.group(1))
+                        elif "Pages speculative" in line:
+                            m = re.search(r"(\d+)", line)
+                            if m:
+                                speculative_pages = int(m.group(1))
+                        elif "Pages inactive" in line:
+                            m = re.search(r"(\d+)", line)
+                            if m:
+                                inactive_pages = int(m.group(1))
+                    # 可用内存 = free + speculative + inactive (inactive可被系统回收)
+                    available_mb = (free_pages + speculative_pages + inactive_pages) * page_size // (1024 * 1024)
+                    return float(available_mb)
+
+                # vm_stat 失败则返回总内存的70%（保守估计）
+                return float(total_mb) * 0.70
+        except Exception:
+            pass
+
     return 0.0
 
 
