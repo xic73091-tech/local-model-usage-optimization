@@ -311,6 +311,23 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle manager."""
     logger.info("Starting server...")
 
+    # Security: TLS warning
+    if AUTH_ENABLED:
+        ssl_keyfile = os.environ.get("LMO_SSL_KEYFILE", "")
+        ssl_certfile = os.environ.get("LMO_SSL_CERTFILE", "")
+        if not ssl_keyfile or not ssl_certfile:
+            logger.warning(
+                "SECURITY: API authentication is enabled but no TLS/SSL configured. "
+                "API keys are transmitted in plaintext. For production, use a reverse "
+                "proxy (nginx/caddy) with TLS or set LMO_SSL_KEYFILE/LMO_SSL_CERTFILE."
+            )
+
+    # Rate limiter backend info
+    if _redis_client:
+        logger.info("Rate limiter: Redis backend active")
+    else:
+        logger.info("Rate limiter: in-memory (single-worker only)")
+
     # Hardware detection (sync, fast)
     app_state.hardware_detector = HardwareDetector(auto_detect=True)
     hw = app_state.hardware_detector.profile
@@ -450,9 +467,23 @@ from collections import defaultdict
 # Security: Clamp to reasonable ranges to prevent misconfiguration
 RATE_LIMIT_REQUESTS = max(1, min(10000, int(os.environ.get("LMO_RATE_LIMIT_REQUESTS", "60"))))
 RATE_LIMIT_WINDOW = max(1, min(3600, int(os.environ.get("LMO_RATE_LIMIT_WINDOW", "60"))))  # seconds
+REDIS_URL = os.environ.get("LMO_REDIS_URL", "")  # e.g. redis://localhost:6379/0
+
+# Try Redis for multi-worker rate limiting
+_redis_client = None
+if REDIS_URL:
+    try:
+        import redis
+        _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        _redis_client.ping()
+        logger.info("Rate limiter: using Redis backend (%s)", REDIS_URL)
+    except Exception as e:
+        logger.warning("Redis connection failed (%s), falling back to in-memory rate limiter", e)
+        _redis_client = None
+
 
 class RateLimiter:
-    """Simple in-memory rate limiter per IP address."""
+    """Rate limiter with optional Redis backend for multi-worker deployments."""
 
     def __init__(self, max_requests: int = 60, window_seconds: int = 60):
         self.max_requests = max_requests
@@ -481,6 +512,32 @@ class RateLimiter:
             logger.debug("Rate limiter cleanup: removed %d stale IP entries", len(stale_ips))
 
     def is_allowed(self, client_ip: str) -> bool:
+        if _redis_client:
+            return self._is_allowed_redis(client_ip)
+        return self._is_allowed_memory(client_ip)
+
+    def _is_allowed_redis(self, client_ip: str) -> bool:
+        """Redis-based sliding window rate limiting."""
+        key = f"lmo:ratelimit:{client_ip}"
+        now = time.time()
+        window_start = now - self.window_seconds
+
+        pipe = _redis_client.pipeline()
+        # Remove old entries
+        pipe.zremrangebyscore(key, 0, window_start)
+        # Count current window
+        pipe.zcard(key)
+        # Add current request
+        pipe.zadd(key, {str(now): now})
+        # Set TTL
+        pipe.expire(key, self.window_seconds + 1)
+        results = pipe.execute()
+
+        current_count = results[1]
+        return current_count < self.max_requests
+
+    def _is_allowed_memory(self, client_ip: str) -> bool:
+        """In-memory sliding window rate limiting."""
         now = time.time()
         window_start = now - self.window_seconds
 
@@ -500,6 +557,19 @@ class RateLimiter:
 
     def get_remaining(self, client_ip: str) -> int:
         """Get remaining requests in current window."""
+        if _redis_client:
+            return self._get_remaining_redis(client_ip)
+        return self._get_remaining_memory(client_ip)
+
+    def _get_remaining_redis(self, client_ip: str) -> int:
+        key = f"lmo:ratelimit:{client_ip}"
+        now = time.time()
+        window_start = now - self.window_seconds
+        _redis_client.zremrangebyscore(key, 0, window_start)
+        count = _redis_client.zcard(key)
+        return max(0, self.max_requests - count)
+
+    def _get_remaining_memory(self, client_ip: str) -> int:
         now = time.time()
         window_start = now - self.window_seconds
         recent = [t for t in self.requests[client_ip] if t > window_start]

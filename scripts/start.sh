@@ -165,6 +165,16 @@ if [ "$HOST" = "0.0.0.0" ]; then
     echo ""
 fi
 
+# TLS warning when auth is enabled
+AUTH_ENABLED="${LMO_AUTH_ENABLED:-true}"
+SSL_KEY="${LMO_SSL_KEYFILE:-}"
+SSL_CERT="${LMO_SSL_CERTFILE:-}"
+if [ "$AUTH_ENABLED" = "true" ] && ([ -z "$SSL_KEY" ] || [ -z "$SSL_CERT" ]); then
+    warn "Auth enabled but no TLS configured. API keys sent in plaintext."
+    warn "For production: use reverse proxy (nginx/caddy) with TLS."
+    echo ""
+fi
+
 # =============================================================
 # Check Port Availability
 # =============================================================

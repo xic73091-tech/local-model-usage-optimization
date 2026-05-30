@@ -206,6 +206,16 @@ if ($Host -eq "0.0.0.0") {
     Write-Host ""
 }
 
+# TLS warning when auth is enabled
+$authEnabled = if ($env:LMO_AUTH_ENABLED) { $env:LMO_AUTH_ENABLED.ToLower() } else { "true" }
+$sslKey = if ($env:LMO_SSL_KEYFILE) { $env:LMO_SSL_KEYFILE } else { "" }
+$sslCert = if ($env:LMO_SSL_CERTFILE) { $env:LMO_SSL_CERTFILE } else { "" }
+if ($authEnabled -eq "true" -and ($sslKey -eq "" -or $sslCert -eq "")) {
+    Write-Warn "Auth enabled but no TLS configured. API keys sent in plaintext."
+    Write-Warn "For production: use reverse proxy (nginx/caddy) with TLS."
+    Write-Host ""
+}
+
 # =============================================================
 # Check Port Availability
 # =============================================================

@@ -530,8 +530,25 @@ class DynamicLayerLoader:
         if self._initialized:
             return
 
-        # 创建缓存目录
+        # 创建缓存目录 (安全验证: 确保路径在项目目录内)
         if self._config.swap_enabled:
+            # Security: Resolve to absolute path and verify it's within project root
+            try:
+                resolved = self._cache_dir.resolve()
+                project_root = Path(__file__).resolve().parent.parent.parent
+                if not str(resolved).startswith(str(project_root)):
+                    logger.error(
+                        "SECURITY: swap_directory '%s' is outside project root '%s'. "
+                        "Refusing to create cache directory.",
+                        resolved, project_root
+                    )
+                    raise ValueError(
+                        f"swap_directory must be within project root: {project_root}"
+                    )
+            except (OSError, ValueError) as e:
+                logger.error("Invalid swap_directory: %s", e)
+                raise
+
             self._cache_dir.mkdir(parents=True, exist_ok=True)
             logger.info("磁盘缓存目录: %s", self._cache_dir)
 
