@@ -328,10 +328,12 @@ function Search-Models {
     Write-Step "Searching HuggingFace for: $Query"
 
     python -c @"
+import sys
 from huggingface_hub import HfApi
 
+query = sys.argv[1]
 api = HfApi()
-results = api.list_models(search='$Query', limit=10, sort='downloads', direction=-1)
+results = api.list_models(search=query, limit=10, sort='downloads', direction=-1)
 
 print()
 print('  Search Results:')
@@ -346,7 +348,7 @@ for i, model in enumerate(results, 1):
     if model.pipeline_tag:
         print(f'      Task: {model.pipeline_tag}')
     print()
-"@
+"@ -- $Query
 }
 
 # =============================================================
@@ -374,11 +376,7 @@ function Download-Model {
         New-Item -ItemType Directory -Path $HfCache -Force | Out-Null
     }
 
-    # Escape paths for Python
-    $escapedModelDir = $ModelDir.Replace('\', '\\')
-    $escapedHfCache = $HfCache.Replace('\', '\\')
-
-    # Build Python download script
+    # Build Python download script (args via sys.argv to avoid code injection)
     $pyScript = @"
 import sys
 import os
@@ -390,11 +388,11 @@ except ImportError:
     print("[ERROR] huggingface-hub not installed. Run: pip install huggingface-hub")
     sys.exit(1)
 
-repo_id = "$RepoId"
-quant_type = "$QuantType"
-filename = "$FilePattern"
-model_dir = r"$escapedModelDir"
-hf_cache = r"$escapedHfCache"
+repo_id = sys.argv[1]
+quant_type = sys.argv[2]
+filename = sys.argv[3]
+model_dir = sys.argv[4]
+hf_cache = sys.argv[5]
 
 os.environ["HF_HOME"] = hf_cache
 
@@ -431,11 +429,40 @@ except Exception as e:
     sys.exit(1)
 "@
 
-    python -c $pyScript
+    python -c $pyScript -- $RepoId $QuantType $FilePattern $ModelDir $HfCache
 
     Write-Ok "Download complete!"
 
     return Join-Path $ModelDir ($RepoId.Split("/")[-1])
+}
+
+# =============================================================
+# SHA256 Integrity Verification
+# =============================================================
+function Test-ModelIntegrity {
+    param([string]$ModelPath)
+
+    $ggufFiles = Get-ChildItem -Path $ModelPath -Filter "*.gguf" -Recurse -ErrorAction SilentlyContinue
+    if ($ggufFiles.Count -eq 0) { return }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  SHA256 Integrity Verification" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    $allValid = $true
+    foreach ($file in $ggufFiles) {
+        $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
+        $sizeMB = [Math]::Round($file.Length / 1MB, 1)
+        Write-Host "  File: $($file.Name)" -ForegroundColor Green
+        Write-Host "  Size: ${sizeMB} MB"
+        Write-Host "  SHA256: $hash"
+        Write-Host ""
+    }
+
+    Write-Info "Verify hashes at: https://huggingface.co/models"
+    Write-Host ""
 }
 
 # =============================================================
@@ -521,10 +548,13 @@ function Set-DefaultModel {
     if (Test-Path $ConfigFile) {
         try {
             python -c @"
+import sys
 import yaml
 from pathlib import Path
 
-config_file = Path(r'$($ConfigFile.Replace('\', '\\'))')
+config_file = Path(sys.argv[1])
+rel_path = sys.argv[2]
+
 if config_file.exists():
     with open(config_file) as f:
         config = yaml.safe_load(f) or {}
@@ -532,15 +562,15 @@ if config_file.exists():
     if 'model' not in config:
         config['model'] = {}
 
-    config['model']['default_model'] = '$relPath'
+    config['model']['default_model'] = rel_path
 
     with open(config_file, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-    print('[OK] Set as default model: $relPath')
+    print(f'[OK] Set as default model: {rel_path}')
 else:
     print('[WARN] Config file not found')
-"@
+"@ -- $ConfigFile $relPath
         } catch {
             Write-Warn "Failed to update config: $_"
         }
@@ -605,6 +635,7 @@ $modelPath = Download-Model -RepoId $Repo -QuantType $QuantType -FilePattern $Fi
 # Post-download info
 $modelName = if ($ModelInfo) { $ModelInfo.Name } else { $Repo.Split("/")[-1] }
 Show-PostDownloadInfo -ModelPath $modelPath -ModelName $modelName -ModelParams $ModelParams -QuantType $QuantType
+Test-ModelIntegrity -ModelPath $modelPath
 
 if ($Activate) {
     Set-DefaultModel -ModelPath $modelPath

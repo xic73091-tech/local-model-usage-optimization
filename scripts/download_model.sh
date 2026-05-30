@@ -182,9 +182,9 @@ estimate_vram() {
     local vram_ref=""
     local size_label=""
 
-    # Parse parameter count
-    local num=$(echo "$params" | grep -oP '[\d.]+' | head -1)
-    local unit=$(echo "$params" | grep -oP '[BM]' | head -1)
+    # Parse parameter count (使用 POSIX 兼容正则，兼容 macOS BSD grep)
+    local num=$(echo "$params" | grep -oE '[0-9.]+' | head -1)
+    local unit=$(echo "$params" | grep -oE '[BM]' | head -1)
 
     # Convert to numeric for comparison
     local size_gb=0
@@ -266,27 +266,28 @@ search_models() {
     local query="$1"
     step "Searching HuggingFace for: $query"
 
-    python << PYEOF
-from huggingface_hub import HfApi
+    python -c "
 import sys
+from huggingface_hub import HfApi
 
+query = sys.argv[1]
 api = HfApi()
-results = api.list_models(search="$query", limit=10, sort="downloads", direction=-1)
+results = api.list_models(search=query, limit=10, sort='downloads', direction=-1)
 
-print("\n  Search Results:")
-print("  " + "=" * 60)
+print()
+print('  Search Results:')
+print('  ' + '=' * 60)
 
 for i, model in enumerate(results, 1):
-    tags = [t for t in (model.tags or []) if "gguf" in t.lower()]
-    gguf_marker = " [GGUF]" if tags else ""
+    tags = [t for t in (model.tags or []) if 'gguf' in t.lower()]
+    gguf_marker = ' [GGUF]' if tags else ''
     downloads = model.downloads or 0
-    print(f"  {i:2d}. {model.id}{gguf_marker}")
-    print(f"      Downloads: {downloads:,} | Likes: {model.likes or 0}")
+    print(f'  {i:2d}. {model.id}{gguf_marker}')
+    print(f'      Downloads: {downloads:,} | Likes: {model.likes or 0}')
     if model.pipeline_tag:
-        print(f"      Task: {model.pipeline_tag}")
+        print(f'      Task: {model.pipeline_tag}')
     print()
-
-PYEOF
+" -- "$query"
 }
 
 # =============================================================
@@ -303,8 +304,8 @@ download_model() {
     mkdir -p "$MODEL_DIR"
     mkdir -p "$HF_CACHE"
 
-    # Build Python download command
-    python << PYEOF
+    # Build Python download command (args via sys.argv to avoid code injection)
+    python -c "
 import sys
 import os
 from pathlib import Path
@@ -312,56 +313,91 @@ from pathlib import Path
 try:
     from huggingface_hub import snapshot_download, hf_hub_download
 except ImportError:
-    print("[ERROR] huggingface-hub not installed. Run: pip install huggingface-hub")
+    print('[ERROR] huggingface-hub not installed. Run: pip install huggingface-hub')
     sys.exit(1)
 
-repo_id = "$REPO_ID"
-quant_type = "${QUANT_TYPE:-}"
-filename = "${FILENAME:-}"
-model_dir = "$MODEL_DIR"
-hf_cache = "$HF_CACHE"
+repo_id = sys.argv[1]
+quant_type = sys.argv[2]
+filename = sys.argv[3]
+model_dir = sys.argv[4]
+hf_cache = sys.argv[5]
 
-# Set HF cache directory
-os.environ["HF_HOME"] = hf_cache
+os.environ['HF_HOME'] = hf_cache
 
-print(f"[INFO] Downloading from: {repo_id}")
+print(f'[INFO] Downloading from: {repo_id}')
 
 try:
     if filename:
-        # Download specific file
-        print(f"[INFO] Downloading file: {filename}")
+        print(f'[INFO] Downloading file: {filename}')
         path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
             local_dir=model_dir,
             local_dir_use_symlinks=False
         )
-        print(f"[OK] Downloaded to: {path}")
+        print(f'[OK] Downloaded to: {path}')
     elif quant_type:
-        # Download files matching quantization pattern
-        print(f"[INFO] Filtering for: *{quant_type}*")
+        print(f'[INFO] Filtering for: *{quant_type}*')
         path = snapshot_download(
             repo_id=repo_id,
             local_dir=model_dir,
             local_dir_use_symlinks=False,
-            allow_patterns=[f"*{quant_type}*", "*.json", "*.txt", "README*"],
+            allow_patterns=[f'*{quant_type}*', '*.json', '*.txt', 'README*'],
         )
-        print(f"[OK] Downloaded to: {path}")
+        print(f'[OK] Downloaded to: {path}')
     else:
-        # Download all files
         path = snapshot_download(
             repo_id=repo_id,
             local_dir=model_dir,
             local_dir_use_symlinks=False,
         )
-        print(f"[OK] Downloaded to: {path}")
-
+        print(f'[OK] Downloaded to: {path}')
 except Exception as e:
-    print(f"[ERROR] Download failed: {e}")
+    print(f'[ERROR] Download failed: {e}')
     sys.exit(1)
-PYEOF
+" -- "$REPO_ID" "${QUANT_TYPE:-}" "${FILENAME:-}" "$MODEL_DIR" "$HF_CACHE"
 
     success "Download complete!"
+}
+
+# =============================================================
+# SHA256 Integrity Verification
+# =============================================================
+verify_model_integrity() {
+    local model_path="$1"
+    local gguf_files=$(find "$model_path" -name "*.gguf" -type f 2>/dev/null)
+
+    if [ -z "$gguf_files" ]; then
+        return
+    fi
+
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}  SHA256 Integrity Verification${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+
+    while IFS= read -r gguf_file; do
+        local fname=$(basename "$gguf_file")
+        local fsize=$(du -h "$gguf_file" 2>/dev/null | cut -f1)
+        local hash=""
+
+        if command -v sha256sum &>/dev/null; then
+            hash=$(sha256sum "$gguf_file" | cut -d' ' -f1)
+        elif command -v shasum &>/dev/null; then
+            hash=$(shasum -a 256 "$gguf_file" | cut -d' ' -f1)
+        else
+            hash="(sha256sum not available)"
+        fi
+
+        echo -e "  ${GREEN}File:${NC} $fname"
+        echo -e "  ${GREEN}Size:${NC} $fsize"
+        echo -e "  ${GREEN}SHA256:${NC} $hash"
+        echo ""
+    done <<< "$gguf_files"
+
+    info "Verify hashes at: https://huggingface.co/models"
+    echo ""
 }
 
 # =============================================================
@@ -468,31 +504,41 @@ set_default() {
         return
     fi
 
-    # Make path relative to project root
-    local rel_path=$(realpath --relative-to="$PROJECT_ROOT" "$gguf_file")
+    # Make path relative to project root (兼容 macOS，不依赖 GNU realpath)
+    local rel_path
+    if command -v realpath &>/dev/null && realpath --relative-to=. / &>/dev/null 2>&1; then
+        # GNU realpath 支持 --relative-to
+        rel_path=$(realpath --relative-to="$PROJECT_ROOT" "$gguf_file")
+    else
+        # macOS / 旧系统回退: 用 Python 计算相对路径 (args via sys.argv)
+        rel_path=$(python3 -c "import os.path, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))" -- "$gguf_file" "$PROJECT_ROOT" 2>/dev/null || echo "$gguf_file")
+    fi
 
-    # Update config using Python
-    python << PYEOF
+    # Update config using Python (args via sys.argv to avoid code injection)
+    python -c "
+import sys
 import yaml
 from pathlib import Path
 
-config_file = Path("$CONFIG_FILE")
+config_file = Path(sys.argv[1])
+rel_path = sys.argv[2]
+
 if config_file.exists():
     with open(config_file) as f:
         config = yaml.safe_load(f) or {}
 
-    if "model" not in config:
-        config["model"] = {}
+    if 'model' not in config:
+        config['model'] = {}
 
-    config["model"]["default_model"] = "$rel_path"
+    config['model']['default_model'] = rel_path
 
-    with open(config_file, "w") as f:
+    with open(config_file, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-    print("[OK] Set as default model: $rel_path")
+    print(f'[OK] Set as default model: {rel_path}')
 else:
-    print("[WARN] Config file not found at $config_file")
-PYEOF
+    print(f'[WARN] Config file not found at {config_file}')
+" -- "$CONFIG_FILE" "$rel_path"
 }
 
 # =============================================================
@@ -537,6 +583,7 @@ BANNER
     MODEL_DESC="${MODEL_DESC:-Custom Model}"
     MODEL_PARAMS="${MODEL_PARAMS:-?}"
     post_download_info
+    verify_model_integrity "$MODEL_DIR/$(basename "$REPO_ID")"
 
     # Set as default if requested
     if [ "$ACTIVATE" = true ]; then

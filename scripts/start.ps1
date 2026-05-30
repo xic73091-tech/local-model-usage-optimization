@@ -56,7 +56,7 @@ Usage: .\scripts\start.ps1 [OPTIONS]
 
 Options:
   -Port PORT       Server port (default: 8000)
-  -Host HOST       Server host (default: 0.0.0.0)
+  -Host HOST       Server host (default: 127.0.0.1)
   -Workers N       Number of workers (default: 1)
   -LogLevel LVL    Log level: debug|info|warning|error (default: info)
   -LogFile FILE    Log to file instead of stdout
@@ -144,7 +144,7 @@ if (-not (Test-Path $LogDir)) {
 # Resolve Configuration (env vars -> params -> defaults)
 # =============================================================
 if ($Host -eq "") {
-    $Host = if ($env:LMO_HOST) { $env:LMO_HOST } else { "0.0.0.0" }
+    $Host = if ($env:LMO_HOST) { $env:LMO_HOST } else { "127.0.0.1" }
 }
 if ($Port -eq 0) {
     $Port = if ($env:LMO_PORT) { [int]$env:LMO_PORT } else { 8000 }
@@ -197,6 +197,14 @@ if ($Dev) {
     Write-Host "  Mode:      Development (auto-reload)"
 }
 Write-Host ""
+
+# Security warning for binding to all interfaces
+if ($Host -eq "0.0.0.0") {
+    Write-Warn "Server is binding to ALL network interfaces (0.0.0.0)"
+    Write-Warn "This exposes the API to your entire network."
+    Write-Warn "For local use only, set LMO_HOST=127.0.0.1 or use -Host 127.0.0.1"
+    Write-Host ""
+}
 
 # =============================================================
 # Check Port Availability
@@ -267,19 +275,27 @@ try {
     Write-Host "API Documentation: http://${Host}:${Port}/docs" -ForegroundColor Cyan
     Write-Host ""
 
+    # 使用 venv 中的 Python 可执行文件
+    $PythonExe = Join-Path $VenvDir "Scripts\python.exe"
+    if (-not (Test-Path $PythonExe)) {
+        $PythonExe = "python"  # 回退到系统 Python
+    }
+
     if ($LogFile -ne "") {
         # Start with log file
         $logPath = Join-Path $ProjectRoot $LogFile
-        $serverProcess = Start-Process -FilePath "python" `
-            -ArgumentList @("-m", "uvicorn") + $uvicornArgs `
+        $allArgs = @("-m", "uvicorn") + $uvicornArgs
+        $serverProcess = Start-Process -FilePath $PythonExe `
+            -ArgumentList $allArgs `
             -NoNewWindow `
             -PassThru `
             -RedirectStandardOutput $logPath `
             -RedirectStandardError (Join-Path $LogDir "stderr.log")
     } else {
         # Start in current window
-        $serverProcess = Start-Process -FilePath "python" `
-            -ArgumentList @("-m", "uvicorn") + $uvicornArgs `
+        $allArgs = @("-m", "uvicorn") + $uvicornArgs
+        $serverProcess = Start-Process -FilePath $PythonExe `
+            -ArgumentList $allArgs `
             -NoNewWindow `
             -PassThru
     }

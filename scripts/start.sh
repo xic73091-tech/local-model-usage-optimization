@@ -30,7 +30,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # --- Default configuration ---
-HOST="${HOST:-0.0.0.0}"
+HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
 WORKERS="${WORKERS:-1}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --port PORT       Server port (default: 8000)"
-            echo "  --host HOST       Server host (default: 0.0.0.0)"
+            echo "  --host HOST       Server host (default: 127.0.0.1)"
             echo "  --workers N       Number of workers (default: 1)"
             echo "  --log-level LVL   Log level: debug|info|warning|error (default: info)"
             echo "  --log-file FILE   Log to file instead of stdout"
@@ -156,6 +156,14 @@ if [ "$DEV_MODE" = true ]; then
     echo "  Mode:      Development (auto-reload)"
 fi
 echo ""
+
+# Security warning for binding to all interfaces
+if [ "$HOST" = "0.0.0.0" ]; then
+    warn "Server is binding to ALL network interfaces (0.0.0.0)"
+    warn "This exposes the API to your entire network."
+    warn "For local use only, set HOST=127.0.0.1 or use --host 127.0.0.1"
+    echo ""
+fi
 
 # =============================================================
 # Check Port Availability

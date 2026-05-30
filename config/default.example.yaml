@@ -13,7 +13,8 @@ server:
   workers: 1                    # uvicorn worker count (1 recommended for GPU inference)
   reload: false                 # auto-reload on code change (dev only)
   cors_origins:
-    - "*"                       # allowed CORS origins
+    - "http://localhost:3000"    # allowed CORS origins (use specific domains in production)
+    - "http://127.0.0.1:3000"
   request_timeout: 120          # max request timeout in seconds
   max_request_size: 10485760    # 10MB max request body size
 
