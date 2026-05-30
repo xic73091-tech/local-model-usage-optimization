@@ -25,6 +25,10 @@ huggingface-hub>=0.16.0
 httpx>=0.24.0
 aiofiles>=23.0.0
 
+# --- Self-Learning System ---
+apscheduler>=3.10.0
+aiosqlite>=0.20.0
+
 # --- Utilities ---
 rich>=13.0.0
 click>=8.1.0

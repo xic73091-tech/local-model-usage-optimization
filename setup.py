@@ -21,6 +21,8 @@ install_requires = [
     "aiofiles>=23.0.0",
     "rich>=13.0.0",
     "click>=8.1.0",
+    "apscheduler>=3.10.0",
+    "aiosqlite>=0.20.0",
 ]
 
 extras_require = {

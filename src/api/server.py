@@ -59,6 +59,14 @@ from src.optimization.memory_optimizer import (
 from src.backends.base import InferenceBackend, InferenceConfig
 from src.backends.llama_cpp import LlamaCppBackend
 
+# Self-learning system
+try:
+    from src.learning import LearningScheduler
+    from src.learning.scheduler import LearningConfig
+    LEARNING_AVAILABLE = True
+except ImportError:
+    LEARNING_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -288,6 +296,7 @@ class AppState:
     scheduler: Optional[InferenceScheduler] = None
     memory_optimizer: Optional[MemoryOptimizer] = None
     model_manager: Optional[ModelManager] = None
+    learning_scheduler: Optional[Any] = None  # LearningScheduler if available
     backends: Dict[str, InferenceBackend] = {}
     model_registry: Dict[str, Dict[str, Any]] = {}
     models_dir: Path = Path("models")
@@ -367,10 +376,30 @@ async def lifespan(app: FastAPI):
     # Auto-discover models in models directory
     _discover_models()
 
+    # Self-learning system
+    if LEARNING_AVAILABLE:
+        learning_enabled = os.environ.get("LMO_LEARNING_ENABLED", "true").lower() == "true"
+        learning_config = LearningConfig(
+            enabled=learning_enabled,
+            cron_hour=int(os.environ.get("LMO_LEARNING_CRON_HOUR", "2")),
+            cron_minute=int(os.environ.get("LMO_LEARNING_CRON_MINUTE", "0")),
+            analysis_days_back=int(os.environ.get("LMO_LEARNING_DAYS_BACK", "7")),
+            github_token=os.environ.get("GITHUB_TOKEN", ""),
+            semantic_scholar_api_key=os.environ.get("SEMANTIC_SCHOLAR_API_KEY", ""),
+        )
+        app_state.learning_scheduler = LearningScheduler(learning_config)
+        await app_state.learning_scheduler.initialize()
+        await app_state.learning_scheduler.start()
+        logger.info("Self-learning system initialized")
+    else:
+        logger.info("Self-learning system not available (missing dependencies)")
+
     yield  # ---- server is running ----
 
     # Shutdown
     logger.info("Shutting down server...")
+    if app_state.learning_scheduler:
+        await app_state.learning_scheduler.stop()
     if app_state.scheduler:
         await app_state.scheduler.stop()
     if app_state.metrics_collector:
@@ -1288,6 +1317,104 @@ def main():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+# ================================================================
+# Self-Learning API
+# ================================================================
+
+@app.get("/api/learning/status")
+async def learning_status(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get self-learning system status."""
+    if not app_state.learning_scheduler:
+        return {"available": False, "reason": "Learning system not initialized"}
+    return {"available": True, **app_state.learning_scheduler.get_status()}
+
+
+@app.post("/api/learning/run")
+async def learning_run_now(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Trigger an immediate learning cycle."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    result = await app_state.learning_scheduler.run_now()
+    return result
+
+
+@app.get("/api/learning/report/latest")
+async def learning_latest_report(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get the latest learning report."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    kb = app_state.learning_scheduler._kb
+    report = await kb.get_latest_report()
+    if not report:
+        return {"report": None, "message": "No reports generated yet"}
+    return {"report": report}
+
+
+@app.get("/api/learning/stats")
+async def learning_stats(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get knowledge base statistics."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    kb = app_state.learning_scheduler._kb
+    stats = await kb.get_stats()
+    return stats
+
+
+@app.get("/api/learning/proposals")
+async def learning_proposals(
+    status: Optional[str] = None,
+    limit: int = 20,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get optimization proposals from the knowledge base."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    kb = app_state.learning_scheduler._kb
+    proposals = await kb.get_proposals(status=status, limit=limit)
+    return {"proposals": proposals, "count": len(proposals)}
+
+
+@app.get("/api/learning/findings")
+async def learning_findings(
+    relevance: Optional[str] = None,
+    limit: int = 20,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get GitHub findings from the knowledge base."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    kb = app_state.learning_scheduler._kb
+    findings = await kb.get_github_findings(limit=limit, relevance=relevance)
+    return {"findings": findings, "count": len(findings)}
+
+
+@app.get("/api/learning/papers")
+async def learning_papers(
+    relevance: Optional[str] = None,
+    limit: int = 20,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """Get academic papers from the knowledge base."""
+    if not app_state.learning_scheduler:
+        raise HTTPException(status_code=503, detail="Learning system not available")
+    kb = app_state.learning_scheduler._kb
+    papers = await kb.get_papers(limit=limit, relevance=relevance)
+    return {"papers": papers, "count": len(papers)}
+
+
+# ================================================================
+# Entry point
+# ================================================================
+
 
     # Security: Read host/port from environment, default to localhost
     host = os.environ.get("LMO_HOST", "127.0.0.1")
