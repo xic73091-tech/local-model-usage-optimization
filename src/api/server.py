@@ -502,12 +502,15 @@ REDIS_URL = os.environ.get("LMO_REDIS_URL", "")  # e.g. redis://localhost:6379/0
 _redis_client = None
 if REDIS_URL:
     try:
+        import re
         import redis
         _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
         _redis_client.ping()
-        logger.info("Rate limiter: using Redis backend (%s)", REDIS_URL)
+        # Security: Sanitize Redis URL before logging (strip password)
+        _safe_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", REDIS_URL)
+        logger.info("Rate limiter: using Redis backend (%s)", _safe_url)
     except Exception as e:
-        logger.warning("Redis connection failed (%s), falling back to in-memory rate limiter", e)
+        logger.warning("Redis connection failed, falling back to in-memory rate limiter")
         _redis_client = None
 
 
@@ -1038,7 +1041,8 @@ async def list_models(
             "filename": Path(entry.get("path", "")).name,
             "loaded": entry.get("loaded", False),
             "memory_mb": memory_usage,
-            "active_config": app_state.active_configs.get(model_id),
+            # Security: Only expose config keys, not values (avoid leaking paths)
+            "active_config_keys": list(app_state.active_configs.get(model_id, {}).keys()),
             **extra,
         })
     return {"models": result, "count": len(result)}
@@ -1098,7 +1102,9 @@ async def download_model(
 # ================================================================
 
 @app.get("/api/metrics/current")
-async def get_current_metrics():
+async def get_current_metrics(
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Return the latest performance metrics snapshot."""
     if app_state.metrics_collector is None:
         raise HTTPException(status_code=503, detail="Metrics collector not available")
@@ -1107,10 +1113,15 @@ async def get_current_metrics():
 
 
 @app.get("/api/metrics/history")
-async def get_metrics_history(count: Optional[int] = None):
+async def get_metrics_history(
+    count: Optional[int] = None,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Return historical metrics, optionally limited to *count* entries."""
     if app_state.metrics_collector is None:
         raise HTTPException(status_code=503, detail="Metrics collector not available")
+    if count is not None and count > 10000:
+        raise HTTPException(status_code=400, detail="count must be <= 10000")
     history = app_state.metrics_collector.get_history(count)
     return {
         "count": len(history),
@@ -1119,10 +1130,15 @@ async def get_metrics_history(count: Optional[int] = None):
 
 
 @app.get("/api/metrics/bottleneck")
-async def get_bottleneck(sample_count: int = 60):
+async def get_bottleneck(
+    sample_count: int = 60,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Run bottleneck analysis and return detected bottlenecks."""
     if app_state.analyzer is None:
         raise HTTPException(status_code=503, detail="Analyzer not available")
+    if sample_count > 1000:
+        raise HTTPException(status_code=400, detail="sample_count must be <= 1000")
     result = app_state.analyzer.analyze(sample_count)
     return {
         "bottlenecks": result.to_dict()["bottlenecks"],
@@ -1131,10 +1147,15 @@ async def get_bottleneck(sample_count: int = 60):
 
 
 @app.get("/api/metrics/suggestions")
-async def get_suggestions(sample_count: int = 60):
+async def get_suggestions(
+    sample_count: int = 60,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Run full analysis and return optimization suggestions."""
     if app_state.analyzer is None:
         raise HTTPException(status_code=503, detail="Analyzer not available")
+    if sample_count > 1000:
+        raise HTTPException(status_code=400, detail="sample_count must be <= 1000")
     result = app_state.analyzer.analyze(sample_count)
     return {
         "suggestions": result.to_dict()["suggestions"],
@@ -1212,7 +1233,10 @@ async def optimize_model(
 
 
 @app.get("/api/optimize/report/{model_name}")
-async def get_optimization_report(model_name: str):
+async def get_optimization_report(
+    model_name: str,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
     """Generate a detailed optimization report for a model.
 
     Compares all optimization profiles and strategies.
@@ -1329,17 +1353,39 @@ async def learning_status(
     """Get self-learning system status."""
     if not app_state.learning_scheduler:
         return {"available": False, "reason": "Learning system not initialized"}
-    return {"available": True, **app_state.learning_scheduler.get_status()}
+    status = app_state.learning_scheduler.get_status()
+    # Security: Don't expose raw exception details to clients
+    if status.get("last_error"):
+        status["last_error"] = "Internal error (check server logs for details)"
+    return {"available": True, **status}
+
+
+# Cooldown tracking for /api/learning/run
+_learning_run_last_ts: float = 0.0
+_LEARNING_RUN_COOLDOWN_SEC = 300  # 5 minutes between manual runs
 
 
 @app.post("/api/learning/run")
 async def learning_run_now(
     api_key: Optional[str] = Depends(verify_api_key),
 ):
-    """Trigger an immediate learning cycle."""
+    """Trigger an immediate learning cycle (cooldown: 5 minutes)."""
+    global _learning_run_last_ts
     if not app_state.learning_scheduler:
         raise HTTPException(status_code=503, detail="Learning system not available")
+    now = time.time()
+    elapsed = now - _learning_run_last_ts
+    if elapsed < _LEARNING_RUN_COOLDOWN_SEC:
+        remaining = int(_LEARNING_RUN_COOLDOWN_SEC - elapsed)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Cooldown active. Try again in {remaining} seconds.",
+        )
+    _learning_run_last_ts = now
     result = await app_state.learning_scheduler.run_now()
+    # Security: Sanitize error in response
+    if result.get("error"):
+        result["error"] = "Cycle failed (check server logs for details)"
     return result
 
 
@@ -1378,6 +1424,10 @@ async def learning_proposals(
     """Get optimization proposals from the knowledge base."""
     if not app_state.learning_scheduler:
         raise HTTPException(status_code=503, detail="Learning system not available")
+    if limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be <= 500")
+    if status and status not in ("pending", "testing", "validated", "rejected"):
+        raise HTTPException(status_code=400, detail="Invalid status filter")
     kb = app_state.learning_scheduler._kb
     proposals = await kb.get_proposals(status=status, limit=limit)
     return {"proposals": proposals, "count": len(proposals)}
@@ -1392,6 +1442,10 @@ async def learning_findings(
     """Get GitHub findings from the knowledge base."""
     if not app_state.learning_scheduler:
         raise HTTPException(status_code=503, detail="Learning system not available")
+    if limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be <= 500")
+    if relevance and relevance not in ("high", "medium", "low"):
+        raise HTTPException(status_code=400, detail="Invalid relevance filter")
     kb = app_state.learning_scheduler._kb
     findings = await kb.get_github_findings(limit=limit, relevance=relevance)
     return {"findings": findings, "count": len(findings)}
@@ -1406,6 +1460,10 @@ async def learning_papers(
     """Get academic papers from the knowledge base."""
     if not app_state.learning_scheduler:
         raise HTTPException(status_code=503, detail="Learning system not available")
+    if limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be <= 500")
+    if relevance and relevance not in ("high", "medium", "low"):
+        raise HTTPException(status_code=400, detail="Invalid relevance filter")
     kb = app_state.learning_scheduler._kb
     papers = await kb.get_papers(limit=limit, relevance=relevance)
     return {"papers": papers, "count": len(papers)}

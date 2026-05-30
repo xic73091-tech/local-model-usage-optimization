@@ -221,6 +221,7 @@ class KnowledgeBase:
         since: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve GitHub findings with optional filters."""
+        limit = min(limit, 1000)  # Prevent unbounded queries
         query = "SELECT * FROM github_findings WHERE 1=1"
         params: list = []
 
@@ -268,6 +269,7 @@ class KnowledgeBase:
         since: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve papers with optional filters."""
+        limit = min(limit, 1000)  # Prevent unbounded queries
         query = "SELECT * FROM papers WHERE 1=1"
         params: list = []
 
@@ -326,6 +328,7 @@ class KnowledgeBase:
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
         """Retrieve optimization proposals."""
+        limit = min(limit, 1000)  # Prevent unbounded queries
         query = "SELECT * FROM optimization_proposals WHERE 1=1"
         params: list = []
 
@@ -393,10 +396,18 @@ class KnowledgeBase:
     # Statistics
     # ------------------------------------------------------------------
 
+    # Whitelist of known table names (prevents SQL injection in get_stats)
+    _ALLOWED_TABLES = frozenset({
+        "github_findings", "papers", "optimization_proposals", "daily_reports",
+    })
+
     async def get_stats(self) -> Dict[str, int]:
         """Get knowledge base statistics."""
         stats = {}
-        for table in ["github_findings", "papers", "optimization_proposals", "daily_reports"]:
+        for table in self._ALLOWED_TABLES:
+            # Defense in depth: whitelist check even though list is hardcoded
+            if table not in self._ALLOWED_TABLES:
+                raise ValueError(f"Invalid table name: {table}")
             async with self._db.execute(f"SELECT COUNT(*) FROM {table}") as cursor:
                 row = await cursor.fetchone()
                 stats[table] = row[0]

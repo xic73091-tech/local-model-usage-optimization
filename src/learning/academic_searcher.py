@@ -70,7 +70,11 @@ class AcademicSearcher:
         headers = {}
         if self._config.semantic_scholar_api_key:
             headers["x-api-key"] = self._config.semantic_scholar_api_key
-        self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
+        self._client = httpx.AsyncClient(
+            timeout=30.0,
+            headers=headers,
+            follow_redirects=False,  # Security: prevent SSRF via redirects
+        )
         logger.info("Academic searcher initialized")
 
     async def close(self) -> None:

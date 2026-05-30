@@ -8,6 +8,7 @@ optimization proposals for the local model optimization project.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -20,6 +21,15 @@ from .knowledge_base import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _clean(text: str, max_len: int = 500) -> str:
+    """Sanitize external text for safe storage in proposals."""
+    if not text:
+        return ""
+    # Strip control characters
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    return text[:max_len]
 
 
 @dataclass
@@ -139,8 +149,8 @@ class AnalysisEngine:
         # Only generate proposals for medium+ impact with known affected modules
         if impact in ("high", "medium") and affected:
             proposal = OptimizationProposal(
-                title=f"Apply insights from: {finding.get('title', 'unknown')}",
-                description=(
+                title=_clean(f"Apply insights from: {finding.get('title', 'unknown')}"),
+                description=_clean(
                     f"Review {finding.get('url', '')} for applicable optimizations.\n\n"
                     f"Description: {finding.get('description', 'N/A')}\n"
                     f"Stars: {finding.get('stars', 0)}, "
@@ -168,8 +178,8 @@ class AnalysisEngine:
 
         if impact in ("high", "medium") and affected:
             proposal = OptimizationProposal(
-                title=f"Implement technique from: {paper.get('title', 'unknown')[:80]}",
-                description=(
+                title=_clean(f"Implement technique from: {paper.get('title', 'unknown')[:80]}"),
+                description=_clean(
                     f"Paper: {paper.get('url', '')}\n"
                     f"Authors: {', '.join(paper.get('authors', [])[:3])}\n"
                     f"Published: {paper.get('published_at', 'N/A')}\n"

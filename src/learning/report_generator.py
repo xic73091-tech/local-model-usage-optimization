@@ -8,6 +8,7 @@ papers, and optimization proposals.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,36 @@ from .analysis_engine import AnalysisResult
 from .knowledge_base import DailyReport, KnowledgeBase
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_md(text: str) -> str:
+    """Sanitize external text for safe inclusion in markdown.
+
+    Escapes characters that could break markdown link syntax or
+    inject malicious links (XSS via markdown).
+    """
+    if not text:
+        return ""
+    # Strip control characters
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    # Escape markdown link injection: ] and ) break link syntax
+    text = text.replace("]", "\\]").replace(")", "\\)")
+    # Escape markdown image syntax
+    text = text.replace("!", "\\!")
+    # Strip javascript: and data: URIs
+    text = re.sub(r"(?i)(javascript|data|vbscript):", r"\\1:", text)
+    return text
+
+
+def _sanitize_url(url: str) -> str:
+    """Validate and sanitize a URL for markdown inclusion."""
+    if not url:
+        return "#"
+    # Only allow http/https URLs
+    if not re.match(r"^https?://", url):
+        return "#"
+    # Escape markdown-breaking characters
+    return url.replace("]", "%5D").replace(")", "%29")
 
 
 class ReportGenerator:
@@ -81,13 +112,15 @@ class ReportGenerator:
 
         if analysis.high_relevance_findings:
             for i, f in enumerate(analysis.high_relevance_findings[:10], 1):
-                lines.append(f"### {i}. [{f.get('title', 'N/A')}]({f.get('url', '#')})")
+                title = _sanitize_md(f.get("title", "N/A"))
+                url = _sanitize_url(f.get("url", ""))
+                lines.append(f"### {i}. [{title}]({url})")
                 lines.append(f"- **Stars**: {f.get('stars', 0)}")
-                lines.append(f"- **Language**: {f.get('language', 'N/A')}")
+                lines.append(f"- **Language**: {_sanitize_md(f.get('language', 'N/A'))}")
                 lines.append(f"- **Score**: {f.get('score', 0)}")
                 desc = f.get("description", "")
                 if desc:
-                    lines.append(f"- **Description**: {desc[:200]}")
+                    lines.append(f"- **Description**: {_sanitize_md(desc[:200])}")
                 lines.append("")
         else:
             lines.append("_No high-relevance GitHub findings this cycle._")
@@ -102,14 +135,17 @@ class ReportGenerator:
 
         if analysis.high_relevance_papers:
             for i, p in enumerate(analysis.high_relevance_papers[:10], 1):
-                lines.append(f"### {i}. [{p.get('title', 'N/A')}]({p.get('url', '#')})")
-                lines.append(f"- **Authors**: {', '.join(p.get('authors', [])[:3])}")
+                title = _sanitize_md(p.get("title", "N/A"))
+                url = _sanitize_url(p.get("url", ""))
+                lines.append(f"### {i}. [{title}]({url})")
+                authors = [_sanitize_md(a) for a in p.get("authors", [])[:3]]
+                lines.append(f"- **Authors**: {', '.join(authors)}")
                 lines.append(f"- **Published**: {p.get('published_at', 'N/A')}")
                 lines.append(f"- **Citations**: {p.get('citation_count', 0)}")
                 lines.append(f"- **Source**: {p.get('source', 'N/A')}")
                 abstract = p.get("abstract", "")
                 if abstract:
-                    lines.append(f"- **Abstract**: {abstract[:300]}...")
+                    lines.append(f"- **Abstract**: {_sanitize_md(abstract[:300])}...")
                 lines.append("")
         else:
             lines.append("_No high-relevance papers this cycle._")
@@ -124,11 +160,12 @@ class ReportGenerator:
 
         if analysis.proposals:
             for i, p in enumerate(analysis.proposals[:10], 1):
-                lines.append(f"### {i}. [{p.estimated_impact.upper()}] {p.title}")
-                lines.append(f"- **Source**: {p.source_url}")
-                lines.append(f"- **Modules**: {', '.join(p.affected_modules)}")
+                lines.append(f"### {i}. [{p.estimated_impact.upper()}] {_sanitize_md(p.title)}")
+                lines.append(f"- **Source**: {_sanitize_url(p.source_url)}")
+                modules = [_sanitize_md(m) for m in p.affected_modules]
+                lines.append(f"- **Modules**: {', '.join(modules)}")
                 lines.append(f"- **Test Plan**:")
-                lines.append(p.test_plan)
+                lines.append(_sanitize_md(p.test_plan))
                 lines.append("")
         else:
             lines.append("_No new optimization proposals this cycle._")

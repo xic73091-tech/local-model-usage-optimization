@@ -64,6 +64,7 @@ class GitHubMonitor:
             base_url=self.API_BASE,
             headers=headers,
             timeout=30.0,
+            follow_redirects=False,  # Security: prevent SSRF via redirects
         )
         logger.info("GitHub monitor initialized (auth=%s)", bool(token))
 
